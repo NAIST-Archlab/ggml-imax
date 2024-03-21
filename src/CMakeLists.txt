@@ -320,6 +320,12 @@ if (GGML_METAL)
         )
 endif()
 
+if (GGML_IMAX)
+    set(GGML_IMAX_SOURCES ggml-imax.c ggml-imax.h emax7.h emax7lib.h ggml-imax-kernels.h)
+    set(GGML_EXTRA_FLAGS ${GGML_EXTRA_FLAGS} -DGGML_USE_IMAX -DEMAX7 -DARMZYNQ)
+endif()
+
+
 if (GGML_PERF)
     set(GGML_EXTRA_FLAGS ${GGML_EXTRA_FLAGS} -DGGML_PERF)
 endif()
