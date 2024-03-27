@@ -321,7 +321,7 @@ if (GGML_METAL)
 endif()
 
 if (GGML_IMAX)
-    set(GGML_IMAX_SOURCES ggml-imax.c ggml-imax.h emax7.h emax7lib.h ggml-imax-kernels.h)
+    set(GGML_IMAX_SOURCES ggml-imax.c ggml-imax.h emax7.h emax7lib.h ggml-imax-kernels.c ggml-imax-kernels.h)
     set(GGML_EXTRA_FLAGS ${GGML_EXTRA_FLAGS} -DGGML_USE_IMAX -DEMAX7 -DARMZYNQ)
 endif()
 
@@ -343,6 +343,7 @@ add_library(${TARGET}
     ${GGML_CUDA_SOURCES}
     ${GGML_OPENCL_SOURCES}
     ${GGML_METAL_SOURCES}
+    ${GGML_IMAX_SOURCES}
     )
 
 target_include_directories(${TARGET} PUBLIC

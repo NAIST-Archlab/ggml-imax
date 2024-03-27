@@ -46,7 +46,7 @@ option(GGML_CLBLAST                 "ggml: use clBLAST"                  OFF)
 option(GGML_HIPBLAS                 "ggml: use hipBLAS"                  OFF)
 option(GGML_CUBLAS                  "ggml: use cuBLAS"                   OFF)
 option(GGML_METAL                   "ggml: use Metal"                    OFF)
-option(GGML_IMAX                    "ggml: use IMAX"                    OFF)
+option(GGML_IMAX                    "ggml: use IMAX"                     OFF)
 
 option(GGML_CUDA_FORCE_DMMV                 "ggml: use dmmv instead of mmvq CUDA kernels"     OFF)
 option(GGML_CUDA_FORCE_MMQ                  "ggml: use mmq kernels instead of cuBLAS"         OFF)
@@ -88,6 +88,7 @@ endif()
 #set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -ffast-math")
 #set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -march=native")
 #set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -mcpu=native")
+set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -z muldefs")
 
 # warning flags
 

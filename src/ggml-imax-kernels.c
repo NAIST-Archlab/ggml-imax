@@ -1,12 +1,19 @@
 #include "ggml-imax-kernels.h"
 #include "ggml.h"
-#include "ggml-imax.h"
 #include "emax7.h"
 #include "emax7lib.h"
 
 #include <stdio.h>
 
 #define NCHIP 1 //Temp
+
+#ifndef DMA_MMAP_SIZE
+#define DMA_MMAP_SIZE 0x10000000
+#endif
+
+#ifndef DMA_REG_SIZE
+#define DMA_REG_SIZE 0x1000
+#endif
 
 #define load_src01_dst(args_name) \
     Uchar** src0_p = (Uchar**)args_name->args[0];\

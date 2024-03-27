@@ -3,13 +3,13 @@
 
 #include "ggml-backend-impl.h"
 #include "ggml.h"
+#include "emax7.h"
 #include "emax7lib.h"
 
 #include <pthread.h>
-#include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <asm/signal.h>
+#include <sys/types.h>
 #include <stdarg.h>
 
 #undef MIN
@@ -25,6 +25,14 @@
 #define GGML_IMAX_LOG_INFO(...)  ggml_imax_log(GGML_LOG_LEVEL_INFO, __VA_ARGS__)
 #define GGML_IMAX_LOG_WARN(...)  ggml_imax_log(GGML_LOG_LEVEL_WARN, __VA_ARGS__)
 #define GGML_IMAX_LOG_ERROR(...) ggml_imax_log(GGML_LOG_LEVEL_ERROR, __VA_ARGS__)
+#endif
+
+#ifndef DMA_MMAP_SIZE
+#define DMA_MMAP_SIZE 0x10000000
+#endif
+
+#ifndef DMA_REG_SIZE
+#define DMA_REG_SIZE 0x1000
 #endif
 
 #define UNUSED(x) (void)(x)
@@ -159,6 +167,9 @@ static void ggml_imax_log(enum ggml_log_level level, const char * format, ...){
 }
 
 // TODO: memorize provisional buffers allocation because it is not possible to free it
+char block_flags[DMA_MMAP_SIZE / DMA_REG_SIZE] = {0};
+uint32_t block_ptr = 0;
+
 static void* ggml_imax_host_malloc(size_t n) {
     void** data = malloc(sizeof(void*)*(n/DMA_REG_SIZE+(n%DMA_REG_SIZE?1:0)));
     for (int i = 0; i < (n/DMA_REG_SIZE)+(n%DMA_REG_SIZE?1:0); ++i) {
@@ -283,10 +294,6 @@ static void ggml_imax_free(struct ggml_imax_context * ctx) {
     free(ctx->device);
     free(ctx);
 }
-
-
-char block_flags[DMA_MMAP_SIZE / DMA_REG_SIZE] = {0};
-uint32_t block_ptr = 0;
 
 struct ggml_backend_imax_buffer {
     void   **data; //data[]: index of block, data[b][n]: data
@@ -909,7 +916,8 @@ static ggml_guid_t ggml_backend_imax_guid(void) {
 }
 
 ggml_backend_t ggml_backend_imax_init(void) {
-    struct ggml_imax_context* ctx = ggml_imax_init(GGML_DEFAULT_N_THREADS);
+    //struct ggml_imax_context* ctx = ggml_imax_init(GGML_DEFAULT_N_THREADS);
+    struct ggml_imax_context* ctx = ggml_imax_init(1);
 
     if (ctx == NULL) {
         return NULL;

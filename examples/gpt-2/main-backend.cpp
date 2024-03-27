@@ -10,6 +10,10 @@
 #include "ggml-metal.h"
 #endif
 
+#ifdef GGML_USE_IMAX
+#include "ggml-imax.h"
+#endif
+
 #include "common.h"
 #include "common-ggml.h"
 
@@ -214,6 +218,17 @@ bool gpt2_model_load(const std::string & fname, gpt2_model & model, gpt_vocab & 
         model.backend = ggml_backend_metal_init();
         if (!model.backend) {
             fprintf(stderr, "%s: ggml_backend_metal_init() failed\n", __func__);
+        }
+    }
+#endif
+
+#ifdef GGML_USE_IMAX
+    if (n_gpu_layers > 0) {
+        fprintf(stderr, "%s: using IMAX backend\n", __func__);
+        ggml_backend_imax_log_set_callback(ggml_log_callback_default, nullptr);
+        model.backend = ggml_backend_imax_init();
+        if (!model.backend) {
+            fprintf(stderr, "%s: ggml_backend_imax_init() failed\n", __func__);
         }
     }
 #endif
@@ -761,6 +776,12 @@ bool gpt2_eval(
 #ifdef GGML_USE_METAL
     if (ggml_backend_is_metal(model.backend)) {
         ggml_backend_metal_set_n_cb(model.backend, n_threads);
+    }
+#endif
+
+#ifdef GGML_USE_IMAX
+    if (ggml_backend_is_imax(model.backend)) {
+        ggml_backend_imax_set_n_cb(model.backend, n_threads);
     }
 #endif
 

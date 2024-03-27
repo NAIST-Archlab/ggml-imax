@@ -3,7 +3,8 @@
 /*         Copyright (C) 2012 by NAIST */
 /*         Primary writer: Y.Nakashima */
 /*                nakashim@is.naist.jp */
-#pragma once
+#ifndef __EMAX7_H__
+#define __EMAX7_H__
 #ifndef UTYPEDEF
 #define UTYPEDEF
 typedef unsigned char      Uchar;
@@ -16,6 +17,9 @@ typedef long double Dll;
 #else
 typedef struct {Ull u[2];} Dll;
 #endif
+#endif
+#ifdef __cplusplus
+extern "C" {
 #endif
 
 #if 1
@@ -596,3 +600,8 @@ struct tconf {
 #endif
 
 /**/
+#ifdef __cplusplus
+}
+#endif
+
+#endif

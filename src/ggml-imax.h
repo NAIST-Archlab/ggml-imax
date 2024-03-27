@@ -28,14 +28,6 @@
 // max memory buffers that can be mapped to the device
 #define GGML_IMAX_MAX_BUFFERS 64
 
-#ifndef DMA_MMAP_SIZE
-#define DMA_MMAP_SIZE 0x10000000
-#endif
-
-#ifndef DMA_REG_SIZE
-#define DMA_REG_SIZE 0x1000
-#endif
-
 struct ggml_tensor;
 struct ggml_cgraph;
 
