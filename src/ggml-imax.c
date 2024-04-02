@@ -28,11 +28,11 @@
 #endif
 
 #ifndef DMA_MMAP_SIZE
-#define DMA_MMAP_SIZE 0x10000000
+#define DMA_MMAP_SIZE 0x0000000000010000LL
 #endif
 
-#ifndef DMA_REG_SIZE
-#define DMA_REG_SIZE 0x1000
+#ifndef DDR_MMAP_SIZE
+#define DDR_MMAP_SIZE	 0x0000000100000000LL
 #endif
 
 #define UNUSED(x) (void)(x)
@@ -167,18 +167,19 @@ static void ggml_imax_log(enum ggml_log_level level, const char * format, ...){
 }
 
 // TODO: memorize provisional buffers allocation because it is not possible to free it
-char block_flags[DMA_MMAP_SIZE / DMA_REG_SIZE] = {0};
+char block_flags[DDR_MMAP_SIZE / DMA_MMAP_SIZE] = {0};
 uint32_t block_ptr = 0;
 
+// TODO: ggml_imax_host_malloc is not implemented
 static void* ggml_imax_host_malloc(size_t n) {
-    void** data = malloc(sizeof(void*)*(n/DMA_REG_SIZE+(n%DMA_REG_SIZE?1:0)));
-    for (int i = 0; i < (n/DMA_REG_SIZE)+(n%DMA_REG_SIZE?1:0); ++i) {
+    void** data = malloc(sizeof(void*)*(n/DMA_MMAP_SIZE+(n%DMA_MMAP_SIZE?1:0)));
+    for (int i = 0; i < (n/DMA_MMAP_SIZE)+(n%DMA_MMAP_SIZE?1:0); ++i) {
         // TODO: find a free block
-        if (block_ptr >= DMA_MMAP_SIZE / DMA_REG_SIZE) {
+        if (block_ptr >= DDR_MMAP_SIZE / DMA_MMAP_SIZE) {
             GGML_IMAX_LOG_ERROR("%s: error: out of memory\n", __func__);
             return NULL;
         } else {
-            data[i] = DMA_BASE2_PHYS + block_ptr * DMA_REG_SIZE;
+            data[i] = emax_info[0].ddr_mmap + (block_ptr * DMA_MMAP_SIZE); // おそらくここが問題起こしてる
             block_flags[block_ptr] = 1;
             block_ptr++;
         }
@@ -193,15 +194,15 @@ static struct ggml_imax_context* ggml_imax_init(int n_cb) {
 #define EMAX7 // Temp
 #define ARMZYNQ // Temp
 #if defined(EMAX7)
+if (emax7_open(n_cb) == NULL) exit(1);
 for (int i = 0; i < n_cb; i++) {
-    if (emax7_open(n_cb) == NULL) exit(1);
     char* membase = emax_info[i].ddr_mmap;
 #if __AARCH64EL__ == 1
     Dll zero = 0;
 #else
     Dll zero = {0, 0};
 #endif
-    {int j;for (j = 0; j < (DMA_MMAP_SIZE + sizeof(Dll) - 1) / sizeof(Dll); j++)*((Dll *)membase + j) = zero;}
+    {int j;for (j = 0; j < (DDR_MMAP_SIZE + sizeof(Dll) - 1) / sizeof(Dll); j++)*((Dll *)membase + j) = zero;}
 
 #if !defined(ARMZYNQ)
     emax_info[i].dma_phys = DMA_BASE2_PHYS; /* defined in emax7lib.h */
@@ -240,7 +241,7 @@ for (int i = 0; i < n_cb; i++) {
 #endif
 
     // Configure context
-    struct ggml_imax_context* ctx = malloc(sizeof(struct ggml_imax_context));
+    struct ggml_imax_context* ctx = (struct ggml_imax_context*) malloc(sizeof(struct ggml_imax_context));
     ctx->device = emax7;
     ctx->n_cb   = MIN(n_cb, GGML_IMAX_MAX_BUFFERS);
 
@@ -252,10 +253,12 @@ for (int i = 0; i < n_cb; i++) {
 
 #define GGML_IMAX_ADD_KERNEL(e, name, supported) \
         if (supported) { \
-            struct imax_kernel_pipeline* kernel = &ctx->kernels[e]; \
+            struct imax_kernel_pipeline* kernel = malloc(sizeof(struct imax_kernel_pipeline)); \
             kernel->kernel = kernel_##name; \
+            ctx->kernels[e] = kernel; \
+            GGML_IMAX_LOG_INFO("loading kernel_%-32s\n", #name); \
         } else { \
-            GGML_IMAX_LOG_WARN("skipping %-32s (not supported)\n", #name); \
+            GGML_IMAX_LOG_WARN("skipping kernle_%-32s (not supported)\n", #name); \
         }
 
         GGML_IMAX_ADD_KERNEL(GGML_IMAX_KERNEL_TYPE_ADD,                       add,                    true);
@@ -287,9 +290,9 @@ for (int i = 0; i < n_cb; i++) {
 static void ggml_imax_free(struct ggml_imax_context * ctx) {
     GGML_IMAX_LOG_INFO("%s: deallocating\n", __func__);
 
-    for (int i = 0; i < GGML_IMAX_KERNEL_TYPE_COUNT; ++i) {
-        free(ctx->kernels[i]);
-    }
+    //for (int i = 0; i < GGML_IMAX_KERNEL_TYPE_COUNT; ++i) {
+        //free(ctx->kernels[i]);
+    //}
 
     free(ctx->device);
     free(ctx);
@@ -312,6 +315,7 @@ struct ggml_backend_imax_buffer_context {
 
 // finds the IMAX buffer
 static void* ggml_imax_get_buffer(struct ggml_tensor * t, size_t * offs) {
+    GGML_IMAX_LOG_INFO("%s: tensor '%s'\n", __func__, t->name);
     const int64_t tsize = ggml_nbytes(t);
 
     ggml_backend_buffer_t buffer = t->view_src ? t->view_src->buffer : t->buffer;
@@ -384,6 +388,7 @@ static bool ggml_imax_graph_compute(
     const int n_cb = ctx->n_cb;
     const int n_nodes_per_cb = (n_nodes + n_cb - 1) / n_cb;
 
+    GGML_IMAX_LOG_INFO("%s: n_nodes = %d, n_cb = %d, n_nodes_per_cb = %d\n", __func__, n_nodes, n_cb, n_nodes_per_cb);
     for (int cb_idx = 0; cb_idx < n_cb; ++cb_idx) {
 
         size_t offs_src0 = 0;
@@ -674,11 +679,14 @@ GGML_CALL static void * ggml_backend_imax_buffer_get_base(ggml_backend_buffer_t 
 }
 
 GGML_CALL static void ggml_backend_imax_buffer_set_tensor(ggml_backend_buffer_t buffer, struct ggml_tensor* tensor, const void* data, size_t offset, size_t size) {
-    for (int i = 0; i < size / DMA_REG_SIZE; i++) {
-        if (DMA_REG_SIZE * (i + 1) > size) {
-            memcpy((char*)tensor->data + offset + DMA_REG_SIZE * i, data, size - DMA_REG_SIZE * i);
+    //GGML_IMAX_LOG_INFO("%s: tensor '%s', offset = %zu, size = %zu\n", __func__, tensor->name, offset, size);
+    struct ggml_backend_imax_buffer_context* ctx = (struct ggml_backend_imax_buffer_context*)buffer->context;
+
+    for (int i = 0; i < size / DMA_MMAP_SIZE; i++) {
+        if (DMA_MMAP_SIZE * (i + 1) > size) {
+            memcpy((char*)(ctx->buffers[0].data[(offset/DMA_MMAP_SIZE)+i]), data, size - (DMA_MMAP_SIZE*i));
         } else {
-            memcpy((char*)tensor->data + offset + DMA_REG_SIZE * i, data, DMA_REG_SIZE);
+            memcpy((char*)(ctx->buffers[0].data[(offset/DMA_MMAP_SIZE)+i]), data, DMA_MMAP_SIZE);
         }
     }
 
@@ -686,11 +694,14 @@ GGML_CALL static void ggml_backend_imax_buffer_set_tensor(ggml_backend_buffer_t 
 }
 
 GGML_CALL static void ggml_backend_imax_buffer_get_tensor(ggml_backend_buffer_t buffer, const struct ggml_tensor* tensor, void* data, size_t offset, size_t size) {
-    for (int i = 0; i < size / DMA_REG_SIZE; i++) {
-        if (DMA_REG_SIZE * (i + 1) > size) {
-            memcpy(data, (char*)tensor->data + offset + DMA_REG_SIZE * i, size - DMA_REG_SIZE * i);
+    //GGML_IMAX_LOG_INFO("%s: tensor '%s', offset = %zu, size = %zu\n", __func__, tensor->name, offset, size);
+    struct ggml_backend_imax_buffer_context* ctx = (struct ggml_backend_imax_buffer_context*)buffer->context;
+
+    for (int i = 0; i < size / DMA_MMAP_SIZE; i++) {
+        if (DMA_MMAP_SIZE * (i + 1) > size) {
+            memcpy(data, (char*)(ctx->buffers[0].data[(offset/DMA_MMAP_SIZE)+i]), size - (DMA_MMAP_SIZE*i));
         } else {
-            memcpy(data, (char*)tensor->data + offset + DMA_REG_SIZE * i, DMA_REG_SIZE);
+            memcpy(data, (char*)(ctx->buffers[0].data[(offset/DMA_MMAP_SIZE)+i]), DMA_MMAP_SIZE);
         }
     }
 
@@ -698,6 +709,8 @@ GGML_CALL static void ggml_backend_imax_buffer_get_tensor(ggml_backend_buffer_t 
 }
 
 GGML_CALL static bool ggml_backend_imax_buffer_cpy_tensor(ggml_backend_buffer_t buffer, const struct ggml_tensor* src, struct ggml_tensor* dst) {
+    GGML_IMAX_LOG_INFO("%s: src '%s', dst '%s'\n", __func__, src->name, dst->name);
+
     if (ggml_backend_buffer_is_host(src->buffer)) {
         memcpy(dst->data, src->data, ggml_nbytes(src));
         return true;
@@ -733,39 +746,42 @@ GGML_CALL static const char* ggml_backend_imax_buffer_type_get_name(ggml_backend
     UNUSED(buft);
 }
 
+GGML_CALL static size_t ggml_backend_imax_buffer_type_get_alignment(ggml_backend_buffer_type_t buft) {
+    return 32;
+    UNUSED(buft);
+}
+
 GGML_CALL static ggml_backend_buffer_t ggml_backend_imax_buffer_type_alloc_buffer(ggml_backend_buffer_type_t buft, size_t size) {
+    GGML_IMAX_LOG_INFO("%s: size = %8.2f MiB %d\n", __func__, size / 1024.0 / 1024.0, block_ptr);
+
     struct ggml_backend_imax_buffer_context* ctx = malloc(sizeof(struct ggml_backend_imax_buffer_context));
 
-    const size_t size_page = DMA_REG_SIZE;
+    const size_t size_page = DMA_MMAP_SIZE;
 
     size_t size_aligned = size;
-    if ((size_aligned % size_page) != 0) {
-        size_aligned += (size_page - (size_aligned % size_page));
+    if ((size_aligned % size_page*ggml_backend_imax_buffer_type_get_alignment(buft)) != 0) {
+        size_aligned += (size_page - (size_aligned % size_page*ggml_backend_imax_buffer_type_get_alignment(buft)));
     }
 
     struct emax7* device = ggml_backend_imax_get_device();
 
+    // TODO: ggml_imax_host_malloc() 直す
     ctx->all_data = ggml_imax_host_malloc(size_aligned);
     ctx->all_size = size_aligned;
     ctx->owned = true;
     ctx->n_buffers = 1;
 
     ctx->buffers[0].data = ctx->all_data;
-    ctx->buffers[0].size = size;
+    ctx->buffers[0].size = ctx->all_size;
 
-    GGML_IMAX_LOG_INFO("%s: allocated buffer, size = %8.2f MiB", __func__, size_aligned / 1024.0 / 1024.0);
+    GGML_IMAX_LOG_INFO("%s: allocated buffer, size = %8.2f MiB\n", __func__, size_aligned / 1024.0 / 1024.0);
 
     return ggml_backend_buffer_init(buft, ggml_backend_imax_buffer_i, ctx, size);
 }
 
-GGML_CALL static size_t ggml_backend_imax_buffer_type_get_alignment(ggml_backend_buffer_type_t buft) {
-    return 32;
-    UNUSED(buft);
-}
-
 GGML_CALL static size_t ggml_backend_imax_buffer_type_get_max_size(ggml_backend_buffer_type_t buft) {
     struct emax7* device = ggml_backend_imax_get_device();
-    size_t max_size = DMA_MMAP_SIZE;
+    size_t max_size = DDR_MMAP_SIZE;
 
     return max_size;
 
@@ -773,13 +789,14 @@ GGML_CALL static size_t ggml_backend_imax_buffer_type_get_max_size(ggml_backend_
 }
 
 GGML_CALL static bool ggml_backend_imax_buffer_type_supports_backend(ggml_backend_buffer_type_t buft, ggml_backend_t backend) {
-    return ggml_backend_is_imax(backend) || ggml_backend_is_cpu(backend);
+    //return ggml_backend_is_imax(backend) || ggml_backend_is_cpu(backend);
+    return ggml_backend_is_cpu(backend);
 
     UNUSED(buft);
 }
 
 GGML_CALL static bool ggml_backend_imax_buffer_type_is_host(ggml_backend_buffer_type_t buft) {
-    return true;
+    return false;
 
     UNUSED(buft);
 }
@@ -803,6 +820,8 @@ GGML_CALL ggml_backend_buffer_type_t ggml_backend_imax_buffer_type(void) {
 
 // TODO: buffer from ptr
 GGML_CALL ggml_backend_buffer_t ggml_backend_imax_buffer_from_ptr(void* data, size_t size, size_t max_size) {
+    GGML_IMAX_LOG_INFO("%s: size = %8.2f MiB\n", __func__, size / 1024.0 / 1024.0);
+
     struct ggml_backend_imax_buffer_context * ctx = malloc(sizeof(struct ggml_backend_imax_buffer_context));
 
     ctx->all_data = data;
