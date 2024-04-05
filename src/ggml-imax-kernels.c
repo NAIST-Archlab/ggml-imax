@@ -421,10 +421,27 @@ void* kernel_mul_mm_q6_K_f32(struct imax_kernel_args* args) {
     return NULL;
 }
 
-void* kernel_upscale_f32         (struct imax_kernel_args* args){}
-void* kernel_pad_f32             (struct imax_kernel_args* args){}
-void* kernel_argsort_f32_i32_asc (struct imax_kernel_args* args){}
-void* kernel_argsort_f32_i32_desc(struct imax_kernel_args* args){}
-void* kernel_sum_rows            (struct imax_kernel_args* args){}
-void* kernel_scale               (struct imax_kernel_args* args){}
-void* kernel_scale_4             (struct imax_kernel_args* args){}
+void* kernel_upscale_f32(struct imax_kernel_args* args) {
+    return NULL;
+}
+void* kernel_pad_f32(struct imax_kernel_args* args) {
+    return NULL;
+
+}
+void* kernel_argsort_f32_i32_asc(struct imax_kernel_args* args) {
+    return NULL;
+
+}
+void* kernel_argsort_f32_i32_desc(struct imax_kernel_args* args) {
+    return NULL;
+}
+void* kernel_sum_rows(struct imax_kernel_args* args) {
+    return NULL;
+}
+void* kernel_scale(struct imax_kernel_args* args) {
+    return NULL;
+
+}
+void* kernel_scale_4(struct imax_kernel_args* args) {
+    return NULL;
+}

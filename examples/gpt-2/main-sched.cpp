@@ -10,6 +10,10 @@
 #include "ggml-metal.h"
 #endif
 
+#ifdef GGML_USE_IMAX
+#include "ggml-imax.h"
+#endif
+
 #include "common.h"
 #include "common-ggml.h"
 
@@ -103,6 +107,7 @@ struct gpt2_model {
 
 void init_backends(gpt2_model & model, const gpt_params & params) {
     ggml_backend_t gpu_backend = NULL;
+    ggml_backend_t imax_backend = NULL;
 
     // initialize the backends
 #ifdef GGML_USE_CUBLAS
@@ -129,6 +134,20 @@ void init_backends(gpt2_model & model, const gpt_params & params) {
 #endif
     if (gpu_backend) {
         model.backends.push_back(gpu_backend);
+    }
+
+#ifdef GGML_USE_IMAX
+    if (params.n_gpu_layers > 0) {
+        fprintf(stderr, "%s: using IMAX backend\n", __func__);
+        ggml_backend_imax_log_set_callback(ggml_log_callback_default, nullptr);
+        imax_backend = ggml_backend_imax_init();
+        if (!imax_backend) {
+            fprintf(stderr, "%s: ggml_backend_imax_init() failed\n", __func__);
+        }
+    }
+#endif
+    if (imax_backend) {
+        model.backends.push_back(imax_backend);
     }
 
     // always add the CPU backend as a fallback

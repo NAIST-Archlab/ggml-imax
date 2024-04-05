@@ -52,6 +52,38 @@ struct ggml_imax_kernel_queue {
     struct imax_kernel_pipeline* tail;
 };
 
+static void ggml_imax_default_log_callback(enum ggml_log_level level, const char * msg, void * user_data) {
+    fprintf(stderr, "%s", msg);
+
+    UNUSED(level);
+    UNUSED(user_data);
+}
+
+ggml_log_callback ggml_imax_log_callback = ggml_imax_default_log_callback;
+void * ggml_imax_log_user_data = NULL;
+
+GGML_ATTRIBUTE_FORMAT(2, 3)
+static void ggml_imax_log(enum ggml_log_level level, const char * format, ...){
+    if (ggml_imax_log_callback != NULL) {
+        va_list args;
+        va_start(args, format);
+        char buffer[128];
+        int len = vsnprintf(buffer, 128, format, args);
+        if (len < 128) {
+            ggml_imax_log_callback(level, buffer, ggml_imax_log_user_data);
+        } else {
+            char* buffer2 = malloc(len+1);
+            va_end(args);
+            va_start(args, format);
+            vsnprintf(buffer2, len+1, format, args);
+            buffer2[len] = 0;
+            ggml_imax_log_callback(level, buffer2, ggml_imax_log_user_data);
+            free(buffer2);
+        }
+        va_end(args);
+    }
+}
+
 void ggml_imax_kernel_queue_push(struct ggml_imax_kernel_queue* queue, struct imax_kernel_pipeline* pipeline) {
     if (queue->head == NULL) {
         queue->head = pipeline;
@@ -79,9 +111,10 @@ struct imax_kernel_pipeline* ggml_imax_kernel_queue_pop(struct ggml_imax_kernel_
 void* ggml_imax_pipeline_runtime(struct ggml_imax_kernel_queue *queue) {
     struct imax_kernel_pipeline* pipeline = queue->head;
 
-    while(pipeline = ggml_imax_kernel_queue_pop(queue)) {
+    while(pipeline != NULL) {
         pthread_create(&pipeline->tid, NULL, pipeline->kernel, &pipeline->args);
         pthread_join(&pipeline->tid, NULL);
+        pipeline = ggml_imax_kernel_queue_pop(queue);
     }
 }
 
@@ -134,38 +167,6 @@ struct ggml_imax_context {
     struct imax_kernel_pipeline* kernels[GGML_IMAX_KERNEL_TYPE_COUNT];
 };
 
-static void ggml_imax_default_log_callback(enum ggml_log_level level, const char * msg, void * user_data) {
-    fprintf(stderr, "%s", msg);
-
-    UNUSED(level);
-    UNUSED(user_data);
-}
-
-ggml_log_callback ggml_imax_log_callback = ggml_imax_default_log_callback;
-void * ggml_imax_log_user_data = NULL;
-
-GGML_ATTRIBUTE_FORMAT(2, 3)
-static void ggml_imax_log(enum ggml_log_level level, const char * format, ...){
-    if (ggml_imax_log_callback != NULL) {
-        va_list args;
-        va_start(args, format);
-        char buffer[128];
-        int len = vsnprintf(buffer, 128, format, args);
-        if (len < 128) {
-            ggml_imax_log_callback(level, buffer, ggml_imax_log_user_data);
-        } else {
-            char* buffer2 = malloc(len+1);
-            va_end(args);
-            va_start(args, format);
-            vsnprintf(buffer2, len+1, format, args);
-            buffer2[len] = 0;
-            ggml_imax_log_callback(level, buffer2, ggml_imax_log_user_data);
-            free(buffer2);
-        }
-        va_end(args);
-    }
-}
-
 // TODO: memorize provisional buffers allocation because it is not possible to free it
 char block_flags[DDR_MMAP_SIZE / DMA_MMAP_SIZE] = {0};
 uint32_t block_ptr = 0;
@@ -189,7 +190,7 @@ static void* ggml_imax_host_malloc(size_t n) {
 }
 
 static struct ggml_imax_context* ggml_imax_init(int n_cb) {
-    GGML_IMAX_LOG_INFO("%s: allocating\n", __func__);
+    GGML_IMAX_LOG_INFO("%s: Initialize IMAX3\n", __func__);
 
 #define EMAX7 // Temp
 #define ARMZYNQ // Temp
@@ -315,7 +316,6 @@ struct ggml_backend_imax_buffer_context {
 
 // finds the IMAX buffer
 static void* ggml_imax_get_buffer(struct ggml_tensor * t, size_t * offs) {
-    GGML_IMAX_LOG_INFO("%s: tensor '%s'\n", __func__, t->name);
     const int64_t tsize = ggml_nbytes(t);
 
     ggml_backend_buffer_t buffer = t->view_src ? t->view_src->buffer : t->buffer;
@@ -388,7 +388,7 @@ static bool ggml_imax_graph_compute(
     const int n_cb = ctx->n_cb;
     const int n_nodes_per_cb = (n_nodes + n_cb - 1) / n_cb;
 
-    GGML_IMAX_LOG_INFO("%s: n_nodes = %d, n_cb = %d, n_nodes_per_cb = %d\n", __func__, n_nodes, n_cb, n_nodes_per_cb);
+    //GGML_IMAX_LOG_INFO("%s: n_nodes = %d, n_cb = %d, n_nodes_per_cb = %d\n", __func__, n_nodes, n_cb, n_nodes_per_cb);
     for (int cb_idx = 0; cb_idx < n_cb; ++cb_idx) {
 
         size_t offs_src0 = 0;
@@ -637,6 +637,8 @@ static bool ggml_imax_graph_compute(
         }
     }
 
+    ggml_imax_kernel_queue_run_sync(&(ctx->queue));
+
     return true;
 }
 
@@ -789,8 +791,7 @@ GGML_CALL static size_t ggml_backend_imax_buffer_type_get_max_size(ggml_backend_
 }
 
 GGML_CALL static bool ggml_backend_imax_buffer_type_supports_backend(ggml_backend_buffer_type_t buft, ggml_backend_t backend) {
-    //return ggml_backend_is_imax(backend) || ggml_backend_is_cpu(backend);
-    return ggml_backend_is_cpu(backend);
+    return ggml_backend_is_imax(backend);
 
     UNUSED(buft);
 }
