@@ -155,6 +155,24 @@ enum ggml_imax_kernel_type {
     GGML_IMAX_KERNEL_TYPE_ARGSORT_F32_I32_ASC,
     GGML_IMAX_KERNEL_TYPE_ARGSORT_F32_I32_DESC,
     GGML_IMAX_KERNEL_TYPE_SUM_ROWS,
+    GGML_IMAX_KERNEL_TYPE_DIV,
+    GGML_IMAX_KERNEL_TYPE_SQR,
+    GGML_IMAX_KERNEL_TYPE_SOFTMAX,
+    GGML_IMAX_KERNEL_TYPE_RMS_NORM,
+    GGML_IMAX_KERNEL_TYPE_NORM,
+    GGML_IMAX_KERNEL_TYPE_GROUP_NORM,
+    GGML_IMAX_KERNEL_TYPE_GET_ROWS,
+    GGML_IMAX_KERNEL_TYPE_ALIBI,
+    GGML_IMAX_KERNEL_TYPE_ROPE,
+    GGML_IMAX_KERNEL_TYPE_IM2COL,
+    GGML_IMAX_KERNEL_TYPE_POOL_1D,
+    GGML_IMAX_KERNEL_TYPE_POOL_2D,
+    GGML_IMAX_KERNEL_TYPE_LEAKY_RELU,
+    GGML_IMAX_KERNEL_TYPE_CPY,
+    GGML_IMAX_KERNEL_TYPE_DUP,
+    GGML_IMAX_KERNEL_TYPE_CONT,
+    GGML_IMAX_KERNEL_TYPE_DIAG_MASK_INF,
+    GGML_IMAX_KERNEL_TYPE_UNARY,
     GGML_IMAX_KERNEL_TYPE_COUNT
 };
 
@@ -262,6 +280,7 @@ for (int i = 0; i < n_cb; i++) {
             GGML_IMAX_LOG_WARN("skipping kernle_%-32s (not supported)\n", #name); \
         }
 
+        // On IMAX + CPU
         GGML_IMAX_ADD_KERNEL(GGML_IMAX_KERNEL_TYPE_ADD,                       add,                    true);
         GGML_IMAX_ADD_KERNEL(GGML_IMAX_KERNEL_TYPE_MUL,                       mul,                    true);
         GGML_IMAX_ADD_KERNEL(GGML_IMAX_KERNEL_TYPE_SCALE,                     scale,                  true);
@@ -278,11 +297,31 @@ for (int i = 0; i < n_cb; i++) {
         GGML_IMAX_ADD_KERNEL(GGML_IMAX_KERNEL_TYPE_MUL_MM_Q4_K_F32,           mul_mm_q4_K_f32,        true);
         GGML_IMAX_ADD_KERNEL(GGML_IMAX_KERNEL_TYPE_MUL_MM_Q5_K_F32,           mul_mm_q5_K_f32,        true);
         GGML_IMAX_ADD_KERNEL(GGML_IMAX_KERNEL_TYPE_MUL_MM_Q6_K_F32,           mul_mm_q6_K_f32,        true);
+
+        // On CPU Only
         GGML_IMAX_ADD_KERNEL(GGML_IMAX_KERNEL_TYPE_UPSCALE_F32,               upscale_f32,            true);
         GGML_IMAX_ADD_KERNEL(GGML_IMAX_KERNEL_TYPE_PAD_F32,                   pad_f32,                true);
         GGML_IMAX_ADD_KERNEL(GGML_IMAX_KERNEL_TYPE_ARGSORT_F32_I32_ASC,       argsort_f32_i32_asc,    true);
         GGML_IMAX_ADD_KERNEL(GGML_IMAX_KERNEL_TYPE_ARGSORT_F32_I32_DESC,      argsort_f32_i32_desc,   true);
         GGML_IMAX_ADD_KERNEL(GGML_IMAX_KERNEL_TYPE_SUM_ROWS,                  sum_rows,               true);
+        GGML_IMAX_ADD_KERNEL(GGML_IMAX_KERNEL_TYPE_DIV,                       div,                    true);
+        GGML_IMAX_ADD_KERNEL(GGML_IMAX_KERNEL_TYPE_SQR,                       sqr,                    true);
+        GGML_IMAX_ADD_KERNEL(GGML_IMAX_KERNEL_TYPE_SOFTMAX,                   softmax,                true);
+        GGML_IMAX_ADD_KERNEL(GGML_IMAX_KERNEL_TYPE_RMS_NORM,                  rms_norm,               true);
+        GGML_IMAX_ADD_KERNEL(GGML_IMAX_KERNEL_TYPE_NORM,                      norm,                   true);
+        GGML_IMAX_ADD_KERNEL(GGML_IMAX_KERNEL_TYPE_GROUP_NORM,                group_norm,             true);
+        GGML_IMAX_ADD_KERNEL(GGML_IMAX_KERNEL_TYPE_GET_ROWS,                  get_rows,               true);
+        GGML_IMAX_ADD_KERNEL(GGML_IMAX_KERNEL_TYPE_ALIBI,                     alibi,                  true);
+        GGML_IMAX_ADD_KERNEL(GGML_IMAX_KERNEL_TYPE_ROPE,                      rope,                   true);
+        GGML_IMAX_ADD_KERNEL(GGML_IMAX_KERNEL_TYPE_IM2COL,                    im2col,                 true);
+        GGML_IMAX_ADD_KERNEL(GGML_IMAX_KERNEL_TYPE_POOL_1D,                   pool_1d,                true);
+        GGML_IMAX_ADD_KERNEL(GGML_IMAX_KERNEL_TYPE_POOL_2D,                   pool_2d,                true);
+        GGML_IMAX_ADD_KERNEL(GGML_IMAX_KERNEL_TYPE_LEAKY_RELU,                leaky_relu,             true);
+        GGML_IMAX_ADD_KERNEL(GGML_IMAX_KERNEL_TYPE_CPY,                       cpy,                    true);
+        GGML_IMAX_ADD_KERNEL(GGML_IMAX_KERNEL_TYPE_DUP,                       dup,                    true);
+        GGML_IMAX_ADD_KERNEL(GGML_IMAX_KERNEL_TYPE_CONT,                      contiguous,             true);
+        GGML_IMAX_ADD_KERNEL(GGML_IMAX_KERNEL_TYPE_DIAG_MASK_INF,             diag_mask_inf,          true);
+        GGML_IMAX_ADD_KERNEL(GGML_IMAX_KERNEL_TYPE_UNARY,                     unary,                  true);
     }
 
     return ctx;
@@ -291,28 +330,13 @@ for (int i = 0; i < n_cb; i++) {
 static void ggml_imax_free(struct ggml_imax_context * ctx) {
     GGML_IMAX_LOG_INFO("%s: deallocating\n", __func__);
 
-    //for (int i = 0; i < GGML_IMAX_KERNEL_TYPE_COUNT; ++i) {
-        //free(ctx->kernels[i]);
-    //}
+    for (int i = 0; i < GGML_IMAX_KERNEL_TYPE_COUNT; ++i) {
+        free(ctx->kernels[i]);
+    }
 
     free(ctx->device);
     free(ctx);
 }
-
-struct ggml_backend_imax_buffer {
-    void   **data; //data[]: index of block, data[b][n]: data
-    size_t   size;
-};
-
-struct ggml_backend_imax_buffer_context {
-    void * all_data;
-    size_t all_size;
-
-    bool owned;
-
-    int n_buffers;
-    struct ggml_backend_imax_buffer buffers[GGML_IMAX_MAX_BUFFERS];
-};
 
 // finds the IMAX buffer
 static void* ggml_imax_get_buffer(struct ggml_tensor * t, size_t * offs) {
@@ -342,8 +366,7 @@ static bool ggml_imax_supports_op(const struct ggml_imax_context * ctx, const st
         case GGML_OP_MUL:
             return true;
         case GGML_OP_MUL_MAT:
-            return ((op->src[0]->type == GGML_TYPE_F32) && (op->src[1]->type == GGML_TYPE_F32)); // temp
-            // TODO: Implement the following operations
+            return true;
             //return (op->src[0]->type != GGML_TYPE_F32 || op->src[1]->type == GGML_TYPE_F32);
         case GGML_OP_ACC:
         case GGML_OP_SUM_ROWS:
@@ -351,7 +374,7 @@ static bool ggml_imax_supports_op(const struct ggml_imax_context * ctx, const st
         case GGML_OP_PAD:
         case GGML_OP_ARGSORT:
         case GGML_OP_UPSCALE:
-            return false; //temp, will be true
+            return true;
         case GGML_OP_DIV:
         case GGML_OP_SQR:
         case GGML_OP_RESHAPE:
@@ -363,6 +386,8 @@ static bool ggml_imax_supports_op(const struct ggml_imax_context * ctx, const st
         case GGML_OP_RMS_NORM:
         case GGML_OP_GROUP_NORM:
         case GGML_OP_NORM:
+        case GGML_OP_GET_ROWS:
+            return true;
         case GGML_OP_ALIBI:
         case GGML_OP_ROPE:
         case GGML_OP_IM2COL:
@@ -373,9 +398,9 @@ static bool ggml_imax_supports_op(const struct ggml_imax_context * ctx, const st
         case GGML_OP_DUP:
         case GGML_OP_CONT:
         case GGML_OP_DIAG_MASK_INF:
-        case GGML_OP_GET_ROWS:
         case GGML_OP_UNARY:
         case GGML_OP_MUL_MAT_ID:
+            return true;
         default:
             return false;
     }
@@ -468,15 +493,15 @@ static bool ggml_imax_graph_compute(
             void* id_dst  = dst  ? ggml_imax_get_buffer(dst,  &offs_dst)  : NULL;
 
 #define set_src01_dst(args_name) \
-    args_name.args[ 0] = &id_src0;\
-    args_name.args[ 1] = &id_src1;\
-    args_name.args[ 2] = &id_dst;\
-    args_name.args[ 3] = &ne00;args_name.args[ 4] = &ne01;args_name.args[ 5] = &ne02;args_name.args[ 6] = &ne03;\
-    args_name.args[ 7] = &nb00;args_name.args[ 8] = &nb01;args_name.args[ 9] = &nb02;args_name.args[10] = &nb03;\
-    args_name.args[11] = &ne10;args_name.args[12] = &ne11;args_name.args[13] = &ne12;args_name.args[14] = &ne13;\
-    args_name.args[15] = &nb10;args_name.args[16] = &nb11;args_name.args[17] = &nb12;args_name.args[18] = &nb13;\
-    args_name.args[19] = & ne0;args_name.args[20] = & ne1;args_name.args[21] = & ne2;args_name.args[22] = & ne3;\
-    args_name.args[23] = & ne0;args_name.args[24] = & ne1;args_name.args[25] = & nb2;args_name.args[26] = & nb3
+    args_name.src0 = id_src0;\
+    args_name.src1 = id_src1;\
+    args_name.src2 = id_src2;\
+    args_name.src0_ne[0] = ne00;args_name.src0_ne[1] = ne01;args_name.src0_ne[2] = ne02;args_name.src0_ne[3] = ne03;\
+    args_name.src0_nb[0] = nb00;args_name.src0_nb[1] = nb01;args_name.src0_nb[2] = nb02;args_name.src0_nb[3] = nb03;\
+    args_name.src1_ne[0] = ne10;args_name.src1_ne[1] = ne11;args_name.src1_ne[2] = ne12;args_name.src1_ne[3] = ne13;\
+    args_name.src1_nb[0] = nb10;args_name.src1_nb[1] = nb11;args_name.src1_nb[2] = nb12;args_name.src1_nb[3] = nb13;\
+    args_name.dst_ne[0]  = ne0; args_name.dst_ne[1]  = ne1;args_name.dst_ne[2]   = ne2; args_name.dst_ne[3]  = ne3;\
+    args_name.dst_nb[0]  = nb0; args_name.dst_nb[1]  = nb1;args_name.dst_nb[2]   = nb2; args_name.dst_nb[3]  = nb3
 
             switch (dst->op) {
                 case GGML_OP_ADD:
@@ -496,9 +521,8 @@ static bool ggml_imax_graph_compute(
                             default: GGML_ASSERT(false);
                         }
 
-                        pipeline->args.args = malloc(sizeof(void*)*28);
                         set_src01_dst(pipeline->args);
-                        pipeline->args.args[27] = &  nb;
+                        pipeline->args.nb = nb;
                         ggml_imax_kernel_queue_push(&(ctx->queue), pipeline);
                     } break;
                 case GGML_OP_MUL_MAT:
@@ -528,13 +552,13 @@ static bool ggml_imax_graph_compute(
 
                             switch (src0->type) {
                                 case GGML_TYPE_F32:     pipeline = ctx->kernels[GGML_IMAX_KERNEL_TYPE_MUL_MM_F32_F32    ]; break;
+                                case GGML_TYPE_F16:     pipeline = ctx->kernels[GGML_IMAX_KERNEL_TYPE_MUL_MM_F16_F32    ]; break;
+                                case GGML_TYPE_Q4_0:    pipeline = ctx->kernels[GGML_IMAX_KERNEL_TYPE_MUL_MM_Q4_0_F32   ]; break;
+                                case GGML_TYPE_Q4_1:    pipeline = ctx->kernels[GGML_IMAX_KERNEL_TYPE_MUL_MM_Q4_1_F32   ]; break;
+                                case GGML_TYPE_Q5_0:    pipeline = ctx->kernels[GGML_IMAX_KERNEL_TYPE_MUL_MM_Q5_0_F32   ]; break;
+                                case GGML_TYPE_Q5_1:    pipeline = ctx->kernels[GGML_IMAX_KERNEL_TYPE_MUL_MM_Q5_1_F32   ]; break;
+                                case GGML_TYPE_Q8_0:    pipeline = ctx->kernels[GGML_IMAX_KERNEL_TYPE_MUL_MM_Q8_0_F32   ]; break;
                                 // TODO: Implement the following operations
-                                //case GGML_TYPE_F16:     pipeline = ctx->kernels[GGML_IMAX_KERNEL_TYPE_MUL_MM_F16_F32    ]; break;
-                                //case GGML_TYPE_Q4_0:    pipeline = ctx->kernels[GGML_IMAX_KERNEL_TYPE_MUL_MM_Q4_0_F32   ]; break;
-                                //case GGML_TYPE_Q4_1:    pipeline = ctx->kernels[GGML_IMAX_KERNEL_TYPE_MUL_MM_Q4_1_F32   ]; break;
-                                //case GGML_TYPE_Q5_0:    pipeline = ctx->kernels[GGML_IMAX_KERNEL_TYPE_MUL_MM_Q5_0_F32   ]; break;
-                                //case GGML_TYPE_Q5_1:    pipeline = ctx->kernels[GGML_IMAX_KERNEL_TYPE_MUL_MM_Q5_1_F32   ]; break;
-                                //case GGML_TYPE_Q8_0:    pipeline = ctx->kernels[GGML_IMAX_KERNEL_TYPE_MUL_MM_Q8_0_F32   ]; break;
                                 //case GGML_TYPE_Q2_K:    pipeline = ctx->kernels[GGML_IMAX_KERNEL_TYPE_MUL_MM_Q2_K_F32   ]; break;
                                 //case GGML_TYPE_Q3_K:    pipeline = ctx->kernels[GGML_IMAX_KERNEL_TYPE_MUL_MM_Q3_K_F32   ]; break;
                                 //case GGML_TYPE_Q4_K:    pipeline = ctx->kernels[GGML_IMAX_KERNEL_TYPE_MUL_MM_Q4_K_F32   ]; break;
@@ -542,13 +566,11 @@ static bool ggml_imax_graph_compute(
                                 //case GGML_TYPE_Q6_K:    pipeline = ctx->kernels[GGML_IMAX_KERNEL_TYPE_MUL_MM_Q6_K_F32   ]; break;
                                 default: GGML_ASSERT(false && "MUL MAT-MAT not implemented");
                             }
-                            pipeline->args.args = malloc(sizeof(void*)*28);
                             set_src01_dst(pipeline->args);
                             if (pipeline != NULL) ggml_imax_kernel_queue_push(&(ctx->queue), pipeline);
                         } else GGML_ASSERT(false && "MUL MAT-MAT not implemented");
                     } break;
 // TODO: Impelment the following operations
-/*
                 case GGML_OP_ACC:
                     {
                         GGML_ASSERT(src0t == GGML_TYPE_F32);
@@ -627,7 +649,169 @@ static bool ggml_imax_graph_compute(
                         };
                         ggml_imax_kernel_queue_push(&(ctx->queue), pipeline);
                     } break;
-*/
+                case GGML_OP_DIV:
+                    {
+                        GGML_ASSERT(src0->type == GGML_TYPE_F32);
+                        GGML_ASSERT(src1->type == GGML_TYPE_F32);
+                        GGML_ASSERT(dst->type  == GGML_TYPE_F32);
+
+                        const size_t offs = 0;
+
+                        struct imax_kernel_pipeline* pipeline = ctx->kernels[GGML_IMAX_KERNEL_TYPE_DIV];
+                        set_src01_dst(pipeline->args);
+                        ggml_imax_kernel_queue_push(&(ctx->queue), pipeline);
+                    } break;
+                case GGML_OP_SQR:
+                    {
+                        GGML_ASSERT(src0->type == GGML_TYPE_F32);
+                        GGML_ASSERT(dst->type  == GGML_TYPE_F32);
+
+                        const size_t offs = 0;
+
+                        struct imax_kernel_pipeline* pipeline = ctx->kernels[GGML_IMAX_KERNEL_TYPE_SQR];
+                        set_src01_dst(pipeline->args);
+                        ggml_imax_kernel_queue_push(&(ctx->queue), pipeline);
+                    } break;
+                case GGML_OP_SOFT_MAX:
+                    {
+                        GGML_ASSERT(src0->type == GGML_TYPE_F32);
+                        GGML_ASSERT(dst->type  == GGML_TYPE_F32);
+
+                        const size_t offs = 0;
+
+                        struct imax_kernel_pipeline* pipeline = ctx->kernels[GGML_IMAX_KERNEL_TYPE_SOFTMAX];
+                        set_src01_dst(pipeline->args);
+                        ggml_imax_kernel_queue_push(&(ctx->queue), pipeline);
+                    } break;
+                case GGML_OP_RMS_NORM:
+                    {
+                        GGML_ASSERT(src0->type == GGML_TYPE_F32);
+                        GGML_ASSERT(dst->type  == GGML_TYPE_F32);
+
+                        const size_t offs = 0;
+
+                        struct imax_kernel_pipeline* pipeline = ctx->kernels[GGML_IMAX_KERNEL_TYPE_RMS_NORM];
+                        set_src01_dst(pipeline->args);
+                        ggml_imax_kernel_queue_push(&(ctx->queue), pipeline);
+                    } break;
+                case GGML_OP_NORM:
+                    {
+                        GGML_ASSERT(src0->type == GGML_TYPE_F32);
+                        GGML_ASSERT(dst->type  == GGML_TYPE_F32);
+
+                        const size_t offs = 0;
+
+                        struct imax_kernel_pipeline* pipeline = ctx->kernels[GGML_IMAX_KERNEL_TYPE_NORM];
+                        set_src01_dst(pipeline->args);
+                        ggml_imax_kernel_queue_push(&(ctx->queue), pipeline);
+                    } break;
+                case GGML_OP_GROUP_NORM:
+                    {
+                        GGML_ASSERT(src0->type == GGML_TYPE_F32);
+                        GGML_ASSERT(dst->type  == GGML_TYPE_F32);
+
+                        const size_t offs = 0;
+
+                        struct imax_kernel_pipeline* pipeline = ctx->kernels[GGML_IMAX_KERNEL_TYPE_GROUP_NORM];
+                        set_src01_dst(pipeline->args);
+                        ggml_imax_kernel_queue_push(&(ctx->queue), pipeline);
+                    } break;
+                case GGML_OP_GET_ROWS:
+                    {
+                        const size_t offs = 0;
+
+                        struct imax_kernel_pipeline* pipeline = ctx->kernels[GGML_IMAX_KERNEL_TYPE_GET_ROWS];
+                        set_src01_dst(pipeline->args);
+                        ggml_imax_kernel_queue_push(&(ctx->queue), pipeline);
+                    } break;
+                case GGML_OP_ALIBI:
+                    {
+                        const size_t offs = 0;
+
+                        struct imax_kernel_pipeline* pipeline = ctx->kernels[GGML_IMAX_KERNEL_TYPE_ALIBI];
+                        set_src01_dst(pipeline->args);
+                        ggml_imax_kernel_queue_push(&(ctx->queue), pipeline);
+                    } break;
+                case GGML_OP_ROPE:
+                    {
+                        const size_t offs = 0;
+
+                        struct imax_kernel_pipeline* pipeline = ctx->kernels[GGML_IMAX_KERNEL_TYPE_ROPE];
+                        set_src01_dst(pipeline->args);
+                        ggml_imax_kernel_queue_push(&(ctx->queue), pipeline);
+                    } break;
+                case GGML_OP_IM2COL:
+                    {
+                        const size_t offs = 0;
+
+                        struct imax_kernel_pipeline* pipeline = ctx->kernels[GGML_IMAX_KERNEL_TYPE_IM2COL];
+                        set_src01_dst(pipeline->args);
+                        ggml_imax_kernel_queue_push(&(ctx->queue), pipeline);
+                    } break;
+                case GGML_OP_POOL_1D:
+                    {
+                        const size_t offs = 0;
+
+                        struct imax_kernel_pipeline* pipeline = ctx->kernels[GGML_IMAX_KERNEL_TYPE_POOL_1D];
+                        set_src01_dst(pipeline->args);
+                        ggml_imax_kernel_queue_push(&(ctx->queue), pipeline);
+                    } break;
+                case GGML_OP_POOL_2D:
+                    {
+                        const size_t offs = 0;
+
+                        struct imax_kernel_pipeline* pipeline = ctx->kernels[GGML_IMAX_KERNEL_TYPE_POOL_2D];
+                        set_src01_dst(pipeline->args);
+                        ggml_imax_kernel_queue_push(&(ctx->queue), pipeline);
+                    } break;
+                case GGML_OP_LEAKY_RELU:
+                    {
+                        const size_t offs = 0;
+
+                        struct imax_kernel_pipeline* pipeline = ctx->kernels[GGML_IMAX_KERNEL_TYPE_LEAKY_RELU];
+                        set_src01_dst(pipeline->args);
+                        ggml_imax_kernel_queue_push(&(ctx->queue), pipeline);
+                    } break;
+                case GGML_OP_CPY:
+                    {
+                        const size_t offs = 0;
+
+                        struct imax_kernel_pipeline* pipeline = ctx->kernels[GGML_IMAX_KERNEL_TYPE_CPY];
+                        set_src01_dst(pipeline->args);
+                        ggml_imax_kernel_queue_push(&(ctx->queue), pipeline);
+                    } break;
+                case GGML_OP_DUP:
+                    {
+                        const size_t offs = 0;
+
+                        struct imax_kernel_pipeline* pipeline = ctx->kernels[GGML_IMAX_KERNEL_TYPE_DUP];
+                        set_src01_dst(pipeline->args);
+                        ggml_imax_kernel_queue_push(&(ctx->queue), pipeline);
+                    } break;
+                case GGML_OP_CONT:
+                    {
+                        const size_t offs = 0;
+
+                        struct imax_kernel_pipeline* pipeline = ctx->kernels[GGML_IMAX_KERNEL_TYPE_CONT];
+                        set_src01_dst(pipeline->args);
+                        ggml_imax_kernel_queue_push(&(ctx->queue), pipeline);
+                    } break;
+                case GGML_OP_DIAG_MASK_INF:
+                    {
+                        const size_t offs = 0;
+
+                        struct imax_kernel_pipeline* pipeline = ctx->kernels[GGML_IMAX_KERNEL_TYPE_DIAG_MASK_INF];
+                        set_src01_dst(pipeline->args);
+                        ggml_imax_kernel_queue_push(&(ctx->queue), pipeline);
+                    } break;
+                case GGML_OP_UNARY:
+                    {
+                        const size_t offs = 0;
+
+                        struct imax_kernel_pipeline* pipeline = ctx->kernels[GGML_IMAX_KERNEL_TYPE_UNARY];
+                        set_src01_dst(pipeline->args);
+                        ggml_imax_kernel_queue_push(&(ctx->queue), pipeline);
+                    } break;
                 default:
                     {
                         GGML_IMAX_LOG_ERROR("%s: error: node %3d, op = %8s not implemented\n", __func__, i, ggml_op_name(dst->op));
@@ -761,8 +945,8 @@ GGML_CALL static ggml_backend_buffer_t ggml_backend_imax_buffer_type_alloc_buffe
     const size_t size_page = DMA_MMAP_SIZE;
 
     size_t size_aligned = size;
-    if ((size_aligned % size_page*ggml_backend_imax_buffer_type_get_alignment(buft)) != 0) {
-        size_aligned += (size_page - (size_aligned % size_page*ggml_backend_imax_buffer_type_get_alignment(buft)));
+    if ((size_aligned % (size_page*ggml_backend_imax_buffer_type_get_alignment(buft))) != 0) {
+        size_aligned += (size_page - (size_aligned % (size_page*ggml_backend_imax_buffer_type_get_alignment(buft))));
     }
 
     struct emax7* device = ggml_backend_imax_get_device();
@@ -817,65 +1001,6 @@ GGML_CALL ggml_backend_buffer_type_t ggml_backend_imax_buffer_type(void) {
     };
 
     return &ggml_backend_buffer_type_imax;
-}
-
-// TODO: buffer from ptr
-GGML_CALL ggml_backend_buffer_t ggml_backend_imax_buffer_from_ptr(void* data, size_t size, size_t max_size) {
-    GGML_IMAX_LOG_INFO("%s: size = %8.2f MiB\n", __func__, size / 1024.0 / 1024.0);
-
-    struct ggml_backend_imax_buffer_context * ctx = malloc(sizeof(struct ggml_backend_imax_buffer_context));
-
-    ctx->all_data = data;
-    ctx->all_size = size;
-    ctx->owned = false;
-    ctx->n_buffers = 0;
-
-    const size_t size_page = 1000; //Temp
-
-    // page-align the data ptr
-    {
-        const uintptr_t offs = (uintptr_t) data % size_page;
-        data  = (void*)((char*) data - offs);
-        size += offs;
-    }
-
-    size_t size_aligned = size;
-    if ((size_aligned % size_page) != 0) {
-        size_aligned += (size_page - (size_aligned % size_page));
-    }
-
-    struct emax7* device = ggml_backend_imax_get_device();
-
-    // the buffer fits into the max buffer size allowed by the device
-    if (size_aligned <= DMA_MMAP_SIZE) {
-        ctx->buffers[ctx->n_buffers].data = data;
-        ctx->buffers[ctx->n_buffers].size = size;
-        GGML_IMAX_LOG_INFO("%s: allocated buffer, size = %8.2f MiB", __func__, size_aligned / 1024.0 / 1024.0);
-
-        ++ctx->n_buffers;
-    } else {
-        // this overlap between the views will guarantee that the tensor with the maximum size will fully fit into
-        // one of the views
-        const size_t size_ovlp = ((max_size + size_page - 1) / size_page + 1) * size_page; // round-up 2 pages just in case
-        const size_t size_step = DMA_MMAP_SIZE - size_ovlp;
-        const size_t size_view = DMA_MMAP_SIZE;
-
-        for (size_t i = 0; i < size; i += size_step) {
-            const size_t size_step_aligned = (i + size_view <= size) ? size_view : (size_aligned - i);
-
-            ctx->buffers[ctx->n_buffers].data = (void *) ((uint8_t *) data + i);
-            ctx->buffers[ctx->n_buffers].size = size_step_aligned;
-
-            GGML_IMAX_LOG_INFO("%s: allocated buffer, size = %8.2f MiB, offs = %12ld", __func__, size_step_aligned / 1024.0 / 1024.0, i);
-            if (i + size_step < size) {
-                GGML_IMAX_LOG_INFO("\n");
-            }
-
-            ++ctx->n_buffers;
-        }
-    }
-
-    return ggml_backend_buffer_init(ggml_backend_imax_buffer_type(), ggml_backend_imax_buffer_i, ctx, size);
 }
 
 // backend

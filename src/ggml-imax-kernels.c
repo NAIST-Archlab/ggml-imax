@@ -16,37 +16,38 @@
 #endif
 
 #define load_src01_dst(args_name) \
-    Uchar** src0_p = (Uchar**)args_name->args[0];\
-    Uchar** src1_p = (Uchar**)args_name->args[1];\
-    Uchar** dst_p  = (Uchar**)args_name->args[2];\
-    Ull    ne00 =  *(Ull*)args_name->args[3];    \
-    Ull    ne01 =  *(Ull*)args_name->args[4];    \
-    Ull    ne02 =  *(Ull*)args_name->args[5];    \
-    Ull    ne03 =  *(Ull*)args_name->args[6];    \
-    Ull    nb00 =  *(Ull*)args_name->args[7];    \
-    Ull    nb01 =  *(Ull*)args_name->args[8];    \
-    Ull    nb02 =  *(Ull*)args_name->args[9];    \
-    Ull    nb03 =  *(Ull*)args_name->args[10];   \
-    Ull    ne10 =  *(Ull*)args_name->args[11];   \
-    Ull    ne11 =  *(Ull*)args_name->args[12];   \
-    Ull    ne12 =  *(Ull*)args_name->args[13];   \
-    Ull    ne13 =  *(Ull*)args_name->args[14];   \
-    Ull    nb10 =  *(Ull*)args_name->args[15];   \
-    Ull    nb11 =  *(Ull*)args_name->args[16];   \
-    Ull    nb12 =  *(Ull*)args_name->args[17];   \
-    Ull    nb13 =  *(Ull*)args_name->args[18];   \
-    Ull    ne0  =  *(Ull*)args_name->args[19];   \
-    Ull    ne1  =  *(Ull*)args_name->args[20];   \
-    Ull    ne2  =  *(Ull*)args_name->args[21];   \
-    Ull    ne3  =  *(Ull*)args_name->args[22];   \
-    Ull    nb0  =  *(Ull*)args_name->args[23];   \
-    Ull    nb1  =  *(Ull*)args_name->args[24];   \
-    Ull    nb2  =  *(Ull*)args_name->args[25];   \
-    Ull    nb3  =  *(Ull*)args_name->args[26]
+    Uchar** src0_p = (Uchar**)args_name->src0;\
+    Uchar** src1_p = (Uchar**)args_name->src1;\
+    Uchar** dst_p  = (Uchar**)args_name->dst;\
+    Ull    ne00 =  *(Ull*)args_name->src0_ne[0];    \
+    Ull    ne01 =  *(Ull*)args_name->src0_ne[1];    \
+    Ull    ne02 =  *(Ull*)args_name->src0_ne[2];    \
+    Ull    ne03 =  *(Ull*)args_name->src0_ne[3];    \
+    Ull    nb00 =  *(Ull*)args_name->src0_nb[0];    \
+    Ull    nb01 =  *(Ull*)args_name->src0_nb[1];    \
+    Ull    nb02 =  *(Ull*)args_name->src0_nb[2];    \
+    Ull    nb03 =  *(Ull*)args_name->src0_nb[3];   \
+    Ull    ne10 =  *(Ull*)args_name->src1_ne[0];   \
+    Ull    ne11 =  *(Ull*)args_name->src1_ne[1];   \
+    Ull    ne12 =  *(Ull*)args_name->src1_ne[2];   \
+    Ull    ne13 =  *(Ull*)args_name->src1_ne[3];   \
+    Ull    nb10 =  *(Ull*)args_name->src1_nb[0];   \
+    Ull    nb11 =  *(Ull*)args_name->src1_nb[1];   \
+    Ull    nb12 =  *(Ull*)args_name->src1_nb[2];   \
+    Ull    nb13 =  *(Ull*)args_name->src1_nb[3];   \
+    Ull    ne0  =  *(Ull*)args_name->dst_ne[0];   \
+    Ull    ne1  =  *(Ull*)args_name->dst_ne[1];   \
+    Ull    ne2  =  *(Ull*)args_name->dst_ne[2];   \
+    Ull    ne3  =  *(Ull*)args_name->dst_ne[3];   \
+    Ull    nb0  =  *(Ull*)args_name->dst_nb[0];   \
+    Ull    nb1  =  *(Ull*)args_name->dst_nb[1];   \
+    Ull    nb2  =  *(Ull*)args_name->dst_nb[2];   \
+    Ull    nb3  =  *(Ull*)args_name->dst_nb[3]
 
 void* kernel_add(struct imax_kernel_args* args) {
+    GGML_IMAX_KERNEL_LOG_DEBUG("%s", __func__);
     load_src01_dst(args);
-    Ull    nb   =  *(Ull*)args->args[27];
+    Ull    nb   =  *(Ull*)args->nb;
 
     for (int i3 = 0; i3 < ne03; i3++) {
         for (int i2 = 0; i2 < ne02; i2++) {
@@ -71,8 +72,9 @@ void* kernel_add(struct imax_kernel_args* args) {
 }
 
 void* kernel_mul(struct imax_kernel_args* args) {
+    GGML_IMAX_KERNEL_LOG_DEBUG("%s", __func__);
     load_src01_dst(args);
-    Ull    nb   =  *(Ull*)args->args[27];
+    Ull    nb   =  *(Ull*)args->nb;
 
     for (int i3 = 0; i3 < ne03; i3++) {
         for (int i2 = 0; i2 < ne02; i2++) {
@@ -97,6 +99,7 @@ void* kernel_mul(struct imax_kernel_args* args) {
 }
 
 void* kernel_mul_mm_f32_f32(struct imax_kernel_args* args) {
+    GGML_IMAX_KERNEL_LOG_DEBUG("%s", __func__);
     load_src01_dst(args);
 
     for (int i3 = 0; i3 < ne03; i3++) {
@@ -125,6 +128,7 @@ void* kernel_mul_mm_f32_f32(struct imax_kernel_args* args) {
 
 // Under construction (not working)
 void* kernel_mul_mm_f16_f32(struct imax_kernel_args* args) {
+    GGML_IMAX_KERNEL_LOG_DEBUG("%s", __func__);
     load_src01_dst(args);
 
     for (int i3 = 0; i3 < ne03; i3++) {
@@ -152,6 +156,7 @@ void* kernel_mul_mm_f16_f32(struct imax_kernel_args* args) {
 }
 
 void* kernel_mul_mm_q4_0_f32(struct imax_kernel_args* args) {
+    GGML_IMAX_KERNEL_LOG_DEBUG("%s", __func__);
     load_src01_dst(args);
 
     for (int i3 = 0; i3 < ne03; i3++) {
@@ -179,6 +184,7 @@ void* kernel_mul_mm_q4_0_f32(struct imax_kernel_args* args) {
 }
 
 void* kernel_mul_mm_q4_1_f32(struct imax_kernel_args* args) {
+    GGML_IMAX_KERNEL_LOG_DEBUG("%s", __func__);
     load_src01_dst(args);
 
     for (int i3 = 0; i3 < ne03; i3++) {
@@ -206,6 +212,7 @@ void* kernel_mul_mm_q4_1_f32(struct imax_kernel_args* args) {
 }
 
 void* kernel_mul_mm_q5_0_f32(struct imax_kernel_args* args) {
+    GGML_IMAX_KERNEL_LOG_DEBUG("%s", __func__);
     load_src01_dst(args);
 
     for (int i3 = 0; i3 < ne03; i3++) {
@@ -233,6 +240,7 @@ void* kernel_mul_mm_q5_0_f32(struct imax_kernel_args* args) {
 }
 
 void* kernel_mul_mm_q5_1_f32(struct imax_kernel_args* args) {
+    GGML_IMAX_KERNEL_LOG_DEBUG("%s", __func__);
     load_src01_dst(args);
 
     for (int i3 = 0; i3 < ne03; i3++) {
@@ -260,6 +268,7 @@ void* kernel_mul_mm_q5_1_f32(struct imax_kernel_args* args) {
 }
 
 void* kernel_mul_mm_q8_0_f32(struct imax_kernel_args* args) {
+    GGML_IMAX_KERNEL_LOG_DEBUG("%s", __func__);
     load_src01_dst(args);
 
     for (int i3 = 0; i3 < ne03; i3++) {
@@ -287,6 +296,7 @@ void* kernel_mul_mm_q8_0_f32(struct imax_kernel_args* args) {
 }
 
 void* kernel_mul_mm_q2_K_f32(struct imax_kernel_args* args) {
+    GGML_IMAX_KERNEL_LOG_DEBUG("%s", __func__);
     load_src01_dst(args);
 
     for (int i3 = 0; i3 < ne03; i3++) {
@@ -314,6 +324,7 @@ void* kernel_mul_mm_q2_K_f32(struct imax_kernel_args* args) {
 }
 
 void* kernel_mul_mm_q3_K_f32(struct imax_kernel_args* args) {
+    GGML_IMAX_KERNEL_LOG_DEBUG("%s", __func__);
     load_src01_dst(args);
 
     for (int i3 = 0; i3 < ne03; i3++) {
@@ -341,6 +352,7 @@ void* kernel_mul_mm_q3_K_f32(struct imax_kernel_args* args) {
 }
 
 void* kernel_mul_mm_q4_K_f32(struct imax_kernel_args* args) {
+    GGML_IMAX_KERNEL_LOG_DEBUG("%s", __func__);
     load_src01_dst(args);
 
     for (int i3 = 0; i3 < ne03; i3++) {
@@ -368,6 +380,7 @@ void* kernel_mul_mm_q4_K_f32(struct imax_kernel_args* args) {
 }
 
 void* kernel_mul_mm_q5_K_f32(struct imax_kernel_args* args) {
+    GGML_IMAX_KERNEL_LOG_DEBUG("%s", __func__);
     load_src01_dst(args);
 
     for (int i3 = 0; i3 < ne03; i3++) {
@@ -395,6 +408,7 @@ void* kernel_mul_mm_q5_K_f32(struct imax_kernel_args* args) {
 }
 
 void* kernel_mul_mm_q6_K_f32(struct imax_kernel_args* args) {
+    GGML_IMAX_KERNEL_LOG_DEBUG("%s", __func__);
     load_src01_dst(args);
 
     for (int i3 = 0; i3 < ne03; i3++) {
@@ -418,30 +432,5 @@ void* kernel_mul_mm_q6_K_f32(struct imax_kernel_args* args) {
         }
     }
 
-    return NULL;
-}
-
-void* kernel_upscale_f32(struct imax_kernel_args* args) {
-    return NULL;
-}
-void* kernel_pad_f32(struct imax_kernel_args* args) {
-    return NULL;
-
-}
-void* kernel_argsort_f32_i32_asc(struct imax_kernel_args* args) {
-    return NULL;
-
-}
-void* kernel_argsort_f32_i32_desc(struct imax_kernel_args* args) {
-    return NULL;
-}
-void* kernel_sum_rows(struct imax_kernel_args* args) {
-    return NULL;
-}
-void* kernel_scale(struct imax_kernel_args* args) {
-    return NULL;
-
-}
-void* kernel_scale_4(struct imax_kernel_args* args) {
     return NULL;
 }
