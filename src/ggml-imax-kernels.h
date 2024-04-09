@@ -28,6 +28,10 @@ struct imax_kernel_args {
     int dst_ne [GGML_MAX_DIMS];
     int dst_nb [GGML_MAX_DIMS];
 
+    enum ggml_type src0_type;
+    enum ggml_type src1_type;
+    enum ggml_type src2_type;
+
     int nb;
 };
 
@@ -68,8 +72,8 @@ void* kernel_im2col              (struct imax_kernel_args* args);
 void* kernel_pool_1d             (struct imax_kernel_args* args);
 void* kernel_pool_2d             (struct imax_kernel_args* args);
 void* kernel_leaky_relu          (struct imax_kernel_args* args);
-void* kernel_cpy                 (struct imax_kernel_args* args);
 void* kernel_dup                 (struct imax_kernel_args* args);
+void* kernel_cpy                 (struct imax_kernel_args* args);
 void* kernel_contiguous          (struct imax_kernel_args* args);
 void* kernel_transpose           (struct imax_kernel_args* args);
 void* kernel_diag_mask_inf       (struct imax_kernel_args* args);
