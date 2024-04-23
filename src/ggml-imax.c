@@ -137,7 +137,6 @@ enum ggml_imax_kernel_type {
     GGML_IMAX_KERNEL_TYPE_ADD,
     GGML_IMAX_KERNEL_TYPE_MUL,
     GGML_IMAX_KERNEL_TYPE_SCALE,
-    GGML_IMAX_KERNEL_TYPE_SCALE_4,
     GGML_IMAX_KERNEL_TYPE_MUL_MM_F32_F32,
     GGML_IMAX_KERNEL_TYPE_MUL_MM_F16_F32,
     GGML_IMAX_KERNEL_TYPE_MUL_MM_Q4_0_F32,
@@ -283,8 +282,6 @@ for (int i = 0; i < n_cb; i++) {
         // On IMAX + CPU
         GGML_IMAX_ADD_KERNEL(GGML_IMAX_KERNEL_TYPE_ADD,                       add,                    true);
         GGML_IMAX_ADD_KERNEL(GGML_IMAX_KERNEL_TYPE_MUL,                       mul,                    true);
-        GGML_IMAX_ADD_KERNEL(GGML_IMAX_KERNEL_TYPE_SCALE,                     scale,                  true);
-        GGML_IMAX_ADD_KERNEL(GGML_IMAX_KERNEL_TYPE_SCALE_4,                   scale_4,                true);
         GGML_IMAX_ADD_KERNEL(GGML_IMAX_KERNEL_TYPE_MUL_MM_F32_F32,            mul_mm_f32_f32,         true);
         GGML_IMAX_ADD_KERNEL(GGML_IMAX_KERNEL_TYPE_MUL_MM_F16_F32,            mul_mm_f16_f32,         true);
         GGML_IMAX_ADD_KERNEL(GGML_IMAX_KERNEL_TYPE_MUL_MM_Q4_0_F32,           mul_mm_q4_0_f32,        true);
@@ -299,6 +296,7 @@ for (int i = 0; i < n_cb; i++) {
         GGML_IMAX_ADD_KERNEL(GGML_IMAX_KERNEL_TYPE_MUL_MM_Q6_K_F32,           mul_mm_q6_K_f32,        true);
 
         // On CPU Only
+        GGML_IMAX_ADD_KERNEL(GGML_IMAX_KERNEL_TYPE_SCALE,                     scale,                  true);
         GGML_IMAX_ADD_KERNEL(GGML_IMAX_KERNEL_TYPE_UPSCALE_F32,               upscale_f32,            true);
         GGML_IMAX_ADD_KERNEL(GGML_IMAX_KERNEL_TYPE_PAD_F32,                   pad_f32,                true);
         GGML_IMAX_ADD_KERNEL(GGML_IMAX_KERNEL_TYPE_ARGSORT_F32_I32_ASC,       argsort_f32_i32_asc,    true);
@@ -600,12 +598,7 @@ static bool ggml_imax_graph_compute(
 
                         struct imax_kernel_pipeline* pipeline = NULL;
 
-                        if (n % 4 == 0) {
-                            n /= 4;
-                            pipeline = ctx->kernels[GGML_IMAX_KERNEL_TYPE_SCALE_4];
-                        } else {
-                            pipeline = ctx->kernels[GGML_IMAX_KERNEL_TYPE_SCALE];
-                        }
+                        pipeline = ctx->kernels[GGML_IMAX_KERNEL_TYPE_SCALE];
                         ggml_imax_kernel_queue_push(&(ctx->queue), pipeline);
                     } break;
                 case GGML_OP_SUM_ROWS:

@@ -1,7 +1,7 @@
 if (GGML_ALL_WARNINGS)
     if (NOT MSVC)
         add_compile_options(-Wunused -Wextra -Wcast-qual -Wdouble-promotion)
-        add_compile_options("$<$<COMPILE_LANGUAGE:C>:-Wshadow;-Wno-unused-function;-Wmissing-prototypes>")
+        add_compile_options("$<$<COMPILE_LANGUAGE:C>:-Wshadow;-Wno-unused-function;-Wmissing-prototypes>;-Wno-unused-variable")
     else()
         # todo : windows
     endif()

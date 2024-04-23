@@ -16,33 +16,37 @@
 #endif
 
 #define load_src01_dst(args_name) \
-    Uchar** src0_p = (Uchar**)args_name->src0;\
-    Uchar** src1_p = (Uchar**)args_name->src1;\
-    Uchar** dst_p  = (Uchar**)args_name->dst;\
-    Ull    ne00 =  *(Ull*)args_name->src0_ne[0];    \
-    Ull    ne01 =  *(Ull*)args_name->src0_ne[1];    \
-    Ull    ne02 =  *(Ull*)args_name->src0_ne[2];    \
-    Ull    ne03 =  *(Ull*)args_name->src0_ne[3];    \
-    Ull    nb00 =  *(Ull*)args_name->src0_nb[0];    \
-    Ull    nb01 =  *(Ull*)args_name->src0_nb[1];    \
-    Ull    nb02 =  *(Ull*)args_name->src0_nb[2];    \
-    Ull    nb03 =  *(Ull*)args_name->src0_nb[3];   \
-    Ull    ne10 =  *(Ull*)args_name->src1_ne[0];   \
-    Ull    ne11 =  *(Ull*)args_name->src1_ne[1];   \
-    Ull    ne12 =  *(Ull*)args_name->src1_ne[2];   \
-    Ull    ne13 =  *(Ull*)args_name->src1_ne[3];   \
-    Ull    nb10 =  *(Ull*)args_name->src1_nb[0];   \
-    Ull    nb11 =  *(Ull*)args_name->src1_nb[1];   \
-    Ull    nb12 =  *(Ull*)args_name->src1_nb[2];   \
-    Ull    nb13 =  *(Ull*)args_name->src1_nb[3];   \
-    Ull    ne0  =  *(Ull*)args_name->dst_ne[0];   \
-    Ull    ne1  =  *(Ull*)args_name->dst_ne[1];   \
-    Ull    ne2  =  *(Ull*)args_name->dst_ne[2];   \
-    Ull    ne3  =  *(Ull*)args_name->dst_ne[3];   \
-    Ull    nb0  =  *(Ull*)args_name->dst_nb[0];   \
-    Ull    nb1  =  *(Ull*)args_name->dst_nb[1];   \
-    Ull    nb2  =  *(Ull*)args_name->dst_nb[2];   \
-    Ull    nb3  =  *(Ull*)args_name->dst_nb[3]
+    Uchar** src0_p = (Uchar**)args_name->src0;   \
+    Uchar** src1_p = (Uchar**)args_name->src1;   \
+    Uchar** dst_p  = (Uchar**)args_name->dst;    \
+    Ull    ne00 =  *(Ull*)&args_name->src0_ne[0];\
+    Ull    ne01 =  *(Ull*)&args_name->src0_ne[1];\
+    Ull    ne02 =  *(Ull*)&args_name->src0_ne[2];\
+    Ull    ne03 =  *(Ull*)&args_name->src0_ne[3];\
+    Ull    nb00 =  *(Ull*)&args_name->src0_nb[0];\
+    Ull    nb01 =  *(Ull*)&args_name->src0_nb[1];\
+    Ull    nb02 =  *(Ull*)&args_name->src0_nb[2];\
+    Ull    nb03 =  *(Ull*)&args_name->src0_nb[3];\
+    Ull    ne10 =  *(Ull*)&args_name->src1_ne[0];\
+    Ull    ne11 =  *(Ull*)&args_name->src1_ne[1];\
+    Ull    ne12 =  *(Ull*)&args_name->src1_ne[2];\
+    Ull    ne13 =  *(Ull*)&args_name->src1_ne[3];\
+    Ull    nb10 =  *(Ull*)&args_name->src1_nb[0];\
+    Ull    nb11 =  *(Ull*)&args_name->src1_nb[1];\
+    Ull    nb12 =  *(Ull*)&args_name->src1_nb[2];\
+    Ull    nb13 =  *(Ull*)&args_name->src1_nb[3];\
+    Ull    ne0  =  *(Ull*)&args_name->dst_ne[0]; \
+    Ull    ne1  =  *(Ull*)&args_name->dst_ne[1]; \
+    Ull    ne2  =  *(Ull*)&args_name->dst_ne[2]; \
+    Ull    ne3  =  *(Ull*)&args_name->dst_ne[3]; \
+    Ull    nb0  =  *(Ull*)&args_name->dst_nb[0]; \
+    Ull    nb1  =  *(Ull*)&args_name->dst_nb[1]; \
+    Ull    nb2  =  *(Ull*)&args_name->dst_nb[2]; \
+    Ull    nb3  =  *(Ull*)&args_name->dst_nb[3]; \
+    Uint* src0_op_params = args_name->src0_op_params;\
+    Uint* src1_op_params = args_name->src1_op_params;\
+    Uint* src2_op_params = args_name->src2_op_params;\
+    Uint* dst_op_params  = args_name->dst_op_params;
 
 void* kernel_add(struct imax_kernel_args* args) {
     GGML_IMAX_KERNEL_LOG_DEBUG("%s", __func__);

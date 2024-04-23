@@ -31,6 +31,12 @@ struct imax_kernel_args {
     enum ggml_type src0_type;
     enum ggml_type src1_type;
     enum ggml_type src2_type;
+    enum ggml_type dst_type;
+
+    int32_t src0_op_params[16];
+    int32_t src1_op_params[16];
+    int32_t src2_op_params[16];
+    int32_t dst_op_params [16];
 
     int nb;
 };
@@ -38,8 +44,6 @@ struct imax_kernel_args {
 // On IMAX + CPU
 void* kernel_add                 (struct imax_kernel_args* args);
 void* kernel_mul                 (struct imax_kernel_args* args);
-void* kernel_scale               (struct imax_kernel_args* args);
-void* kernel_scale_4             (struct imax_kernel_args* args);
 void* kernel_mul_mm_f32_f32      (struct imax_kernel_args* args);
 void* kernel_mul_mm_f16_f32      (struct imax_kernel_args* args);
 void* kernel_mul_mm_q4_0_f32     (struct imax_kernel_args* args);
@@ -54,6 +58,7 @@ void* kernel_mul_mm_q5_K_f32     (struct imax_kernel_args* args);
 void* kernel_mul_mm_q6_K_f32     (struct imax_kernel_args* args);
 
 // On Only CPU
+void* kernel_scale               (struct imax_kernel_args* args);
 void* kernel_upscale_f32         (struct imax_kernel_args* args);
 void* kernel_pad_f32             (struct imax_kernel_args* args);
 void* kernel_argsort_f32_i32_asc (struct imax_kernel_args* args);
