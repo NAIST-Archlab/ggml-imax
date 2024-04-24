@@ -190,18 +190,15 @@ uint32_t block_ptr = 0;
 
 // TODO: ggml_imax_host_malloc is not implemented
 static void* ggml_imax_host_malloc(size_t n) {
-    void** data = malloc(sizeof(void*)*(n/DMA_MMAP_SIZE+(n%DMA_MMAP_SIZE?1:0)));
-    for (int i = 0; i < (n/DMA_MMAP_SIZE)+(n%DMA_MMAP_SIZE?1:0); ++i) {
-        // TODO: find a free block
-        if (block_ptr >= DDR_MMAP_SIZE / DMA_MMAP_SIZE) {
-            GGML_IMAX_LOG_ERROR("%s: error: out of memory\n", __func__);
+    void* data = emax_info[0].ddr_mmap + (block_ptr * DMA_MMAP_SIZE);
+    for (int i = 0; i < (n + DMA_MMAP_SIZE - 1) / DMA_MMAP_SIZE; i++) {
+        if (block_flags[block_ptr + i] == 1) {
+            GGML_IMAX_LOG_ERROR("%s: error: block %d is already allocated\n", __func__, block_ptr + i);
             return NULL;
-        } else {
-            data[i] = emax_info[0].ddr_mmap + (block_ptr * DMA_MMAP_SIZE); // おそらくここが問題起こしてる
-            block_flags[block_ptr] = 1;
-            block_ptr++;
         }
+        block_flags[block_ptr+i] = 1;
     }
+    block_ptr += (n + DMA_MMAP_SIZE - 1) / DMA_MMAP_SIZE;
 
     return data;
 }
@@ -562,11 +559,11 @@ static bool ggml_imax_graph_compute(
                                 //case GGML_TYPE_Q4_K:    pipeline = ctx->kernels[GGML_IMAX_KERNEL_TYPE_MUL_MM_Q4_K_F32   ]; break;
                                 //case GGML_TYPE_Q5_K:    pipeline = ctx->kernels[GGML_IMAX_KERNEL_TYPE_MUL_MM_Q5_K_F32   ]; break;
                                 //case GGML_TYPE_Q6_K:    pipeline = ctx->kernels[GGML_IMAX_KERNEL_TYPE_MUL_MM_Q6_K_F32   ]; break;
-                                default: GGML_ASSERT(false && "MUL MAT-MAT not implemented");
+                                default: GGML_ASSERT(false && "MUL MAT-MAT not implemented: unsupported type");
                             }
                             set_src01_dst(pipeline->args);
                             if (pipeline != NULL) ggml_imax_kernel_queue_push(&(ctx->queue), pipeline);
-                        } else GGML_ASSERT(false && "MUL MAT-MAT not implemented");
+                        } else GGML_ASSERT(false && "MUL MAT-MAT not implemented: unsupported dimensions");
                     } break;
 // TODO: Impelment the following operations
                 case GGML_OP_ACC:
@@ -861,28 +858,20 @@ GGML_CALL static void ggml_backend_imax_buffer_set_tensor(ggml_backend_buffer_t 
     //GGML_IMAX_LOG_INFO("%s: tensor '%s', offset = %zu, size = %zu\n", __func__, tensor->name, offset, size);
     struct ggml_backend_imax_buffer_context* ctx = (struct ggml_backend_imax_buffer_context*)buffer->context;
 
-    for (int i = 0; i < size / DMA_MMAP_SIZE; i++) {
-        if (DMA_MMAP_SIZE * (i + 1) > size) {
-            memcpy((char*)(ctx->buffers[0].data[(offset/DMA_MMAP_SIZE)+i]), data, size - (DMA_MMAP_SIZE*i));
-        } else {
-            memcpy((char*)(ctx->buffers[0].data[(offset/DMA_MMAP_SIZE)+i]), data, DMA_MMAP_SIZE);
-        }
-    }
+    memcpy(&((char*)(ctx->buffers[0].data))[offset], data, size);
+    // TODO: Below is not working (Bus Error)
+    //if (size % DMA_MMAP_SIZE != 0) {
+        //memset(&((char*)(ctx->buffers[0].data))[offset + size], 0, DMA_MMAP_SIZE - (size % DMA_MMAP_SIZE));
+    //}
 
     UNUSED(buffer);
 }
 
 GGML_CALL static void ggml_backend_imax_buffer_get_tensor(ggml_backend_buffer_t buffer, const struct ggml_tensor* tensor, void* data, size_t offset, size_t size) {
-    //GGML_IMAX_LOG_INFO("%s: tensor '%s', offset = %zu, size = %zu\n", __func__, tensor->name, offset, size);
+    GGML_IMAX_LOG_INFO("%s: tensor '%s', offset = %zu, size = %zu\n", __func__, tensor->name, offset, size);
     struct ggml_backend_imax_buffer_context* ctx = (struct ggml_backend_imax_buffer_context*)buffer->context;
 
-    for (int i = 0; i < size / DMA_MMAP_SIZE; i++) {
-        if (DMA_MMAP_SIZE * (i + 1) > size) {
-            memcpy(data, (char*)(ctx->buffers[0].data[(offset/DMA_MMAP_SIZE)+i]), size - (DMA_MMAP_SIZE*i));
-        } else {
-            memcpy(data, (char*)(ctx->buffers[0].data[(offset/DMA_MMAP_SIZE)+i]), DMA_MMAP_SIZE);
-        }
-    }
+    memcpy(data, &((char*)(&ctx->buffers[0].data))[offset], size);
 
     UNUSED(buffer);
 }

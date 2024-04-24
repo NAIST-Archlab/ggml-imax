@@ -4,14 +4,6 @@
 
 #include <stdio.h>
 
-#ifndef DMA_MMAP_SIZE
-#define DMA_MMAP_SIZE 0x0000000000010000LL
-#endif
-
-#ifndef DDR_MMAP_SIZE
-#define DDR_MMAP_SIZE	 0x0000000100000000LL
-#endif
-
 static const ggml_type_traits_t type_traits[GGML_TYPE_COUNT] = {
     [GGML_TYPE_I8] = {
         .type_name                = "i8",
@@ -328,9 +320,9 @@ static const ggml_type_traits_t type_traits[GGML_TYPE_COUNT] = {
 };
 
 #define load_src01_dst(args_name) \
-    uint8_t** src0_p =  (uint8_t**)args_name->src0;      \
-    uint8_t** src1_p =  (uint8_t**)args_name->src1;      \
-    uint8_t** dst_p  =  (uint8_t**)args_name->dst;       \
+    uint8_t* src0_p =  (uint8_t*)args_name->src0;      \
+    uint8_t* src1_p =  (uint8_t*)args_name->src1;      \
+    uint8_t* dst_p  =  (uint8_t*)args_name->dst;       \
     uint64_t    ne00 =  *(uint64_t*)&args_name->src0_ne[0];\
     uint64_t    ne01 =  *(uint64_t*)&args_name->src0_ne[1];\
     uint64_t    ne02 =  *(uint64_t*)&args_name->src0_ne[2];\
@@ -374,16 +366,11 @@ void* kernel_upscale_f32(struct imax_kernel_args* args) {
             int64_t i02 = i2 / scale_factor;
             for (int i1 = 0; i1 < ne1; i1++) {
                 int64_t i01 = i1 / scale_factor;
+                float* src0 = (float*)&src0_p[i03*nb03 + i02*nb02 + i01*nb01];
+                float* dst  = (float*)&dst_p [i3*nb3  + i2*nb2  + i1*nb1];
                 for (int i0 = 0; i0 < ne0; i0++) {
                     int64_t i00 = i0 / scale_factor;
-                    uint64_t dst_index  = (i3*nb3  + i2*nb2  + i1*nb1);
-                    uint32_t dst_blk  = dst_index/DMA_MMAP_SIZE;
-                    uint64_t src0_index = (i03*nb03 + i02*nb02 + i01*nb01 + i00*nb00);
-                    uint32_t src0_blk = src0_index/DMA_MMAP_SIZE;
-                    float* src0 = &src0_p[src0_blk][src0_index%DMA_MMAP_SIZE];
-                    float* dst  = &dst_p [dst_blk ][dst_index%DMA_MMAP_SIZE ];
-
-                    *dst = *src0;
+                    dst[i0] = src0[i00];
                 }
             }
         }
@@ -402,18 +389,13 @@ void* kernel_pad_f32(struct imax_kernel_args* args) {
     for (int i3 = 0; i3 < ne3; i3++) {
         for (int i2 = 0; i2 < ne2; i2++) {
             for (int i1 = 0; i1 < ne1; i1++) {
+                float* src0 = (float*)&src0_p[i3*nb03 + i2*nb02 + i1*nb01];
+                float* dst  = (float*)&dst_p [i3*nb3 + i2*nb2 + i1*nb1];
                 for (int i0 = 0; i0 < ne0; i0++) {
-                    uint64_t dst_index  = (i3*nb3  + i2*nb2  + i1*nb1);
-                    uint32_t dst_blk  = dst_index/DMA_MMAP_SIZE;
-                    uint64_t src0_index = (i3*nb03 + i2*nb02 + i1*nb01 + i0*nb00);
-                    uint32_t src0_blk = src0_index/DMA_MMAP_SIZE;
-                    float* src0 = &src0_p[src0_blk][src0_index%DMA_MMAP_SIZE];
-                    float* dst  = &dst_p [dst_blk ][dst_index%DMA_MMAP_SIZE ];
-
                     if (i0 < ne00 && i1 < ne01 && i2 < ne02 && i3 < ne03) {
-                        *dst = *src0;
+                        dst[i0] = src0[i0];
                     } else {
-                        *dst = 0;
+                        dst[i0] = 0;
                     }
                 }
             }
@@ -442,16 +424,12 @@ void kernel_sum_rows_f32(struct imax_kernel_args* args) {
         for (int i2 = 0; i2 < ne02; i2++) {
             for (int i1 = 0; i1 < ne01; i1++) {
                 float row_sum = 0;
-                uint64_t dst_index  = (i3*nb3  + i2*nb2  + i1*nb1);
-                uint32_t dst_blk  = dst_index/DMA_MMAP_SIZE;
-                float* dst  = &dst_p [dst_blk ][dst_index%DMA_MMAP_SIZE ];
+                float* dst  = (float*)&dst_p [i3*nb3  + i2*nb2  + i1*nb1];
+                float* src0 = (float*)&src0_p[i3*nb03 + i2*nb02 + i1*nb01];
                 for (int i0 = 0; i0 < ne00; i0++) {
-                    uint64_t src0_index = (i3*nb03 + i2*nb02 + i1*nb01 + i0*nb00);
-                    uint32_t src0_blk = src0_index/DMA_MMAP_SIZE;
-                    float* src0 = &src0_p[src0_blk][src0_index%DMA_MMAP_SIZE];
-                    row_sum += *src0;
+                    row_sum += src0[i0];
                 }
-                *dst = row_sum;
+                dst[0] = row_sum;
             }
         }
     }
@@ -483,14 +461,10 @@ void kernel_scale_f32(struct imax_kernel_args* args) {
     for (int i3 = 0; i3 < ne03; i3++) {
         for (int i2 = 0; i2 < ne02; i2++) {
             for (int i1 = 0; i1 < ne01; i1++) {
+                float* src0 = (float*)&src0_p[i3*nb03 + i2*nb02 + i1*nb01];
+                float* dst  = (float*)&dst_p [i3*nb3  + i2*nb2  + i1*nb1 ];
                 for (int i0 = 0; i0 < ne00; i0++) {
-                    uint64_t src0_index = (i3*nb03 + i2*nb02 + i1*nb01 + i0*nb00);
-                    uint64_t dst_index  = (i3*nb3  + i2*nb2  + i1*nb1  + i0*nb0 );
-                    uint32_t src0_blk = src0_index/DMA_MMAP_SIZE;
-                    uint32_t dst_blk  = dst_index/DMA_MMAP_SIZE;
-                    float* src0 = &src0_p[src0_blk][src0_index%DMA_MMAP_SIZE];
-                    float* dst  = &dst_p [dst_blk ][dst_index%DMA_MMAP_SIZE ];
-                    *dst = *src0 * v;
+                    dst[i0] = src0[i0] * v;
                 }
             }
         }
@@ -521,17 +495,11 @@ void kernel_div_f32(struct imax_kernel_args* args) {
     for (int i3 = 0; i3 < ne03; i3++) {
         for (int i2 = 0; i2 < ne02; i2++) {
             for (int i1 = 0; i1 < ne01; i1++) {
+                float* src0 = (float*)&src0_p[i3*nb03 + i2*nb02 + i1*nb01];
+                float* src1 = (float*)&src1_p[i3*nb13 + i2*nb12 + i1*nb11];
+                float* dst  = (float*)&dst_p [i3*nb3  + i2*nb2  + i1*nb1];
                 for (int i0 = 0; i0 < ne00; i0++) {
-                    uint64_t src0_index = (i3*nb03 + i2*nb02 + i1*nb01 + i0*nb00);
-                    uint64_t src1_index = (i3*nb13 + i2*nb12 + i1*nb11 + i0*nb10);
-                    uint64_t dst_index  = (i3*nb3  + i2*nb2  + i1*nb1  + i0*nb0 );
-                    uint32_t src0_blk = src0_index/DMA_MMAP_SIZE;
-                    uint32_t src1_blk = src1_index/DMA_MMAP_SIZE;
-                    uint32_t dst_blk  = dst_index/DMA_MMAP_SIZE;
-                    float* src0 = &src0_p[src0_blk][src0_index%DMA_MMAP_SIZE];
-                    float* src1 = &src1_p[src1_blk][src1_index%DMA_MMAP_SIZE];
-                    float* dst  = &dst_p [dst_blk ][dst_index%DMA_MMAP_SIZE ];
-                    *dst = *src0 / *src1;
+                    dst[i0] = src0[i0] / src1[i0];
                 }
             }
         }
@@ -562,14 +530,10 @@ void kernel_sqr_f32(struct imax_kernel_args* args) {
     for (int i3 = 0; i3 < ne03; i3++) {
         for (int i2 = 0; i2 < ne02; i2++) {
             for (int i1 = 0; i1 < ne01; i1++) {
+                float* src0 = (float*)&src0_p[i3*nb03 + i2*nb02 + i1*nb01];
+                float* dst  = (float*)&dst_p [i3*nb3  + i2*nb2  + i1*nb1 ];
                 for (int i0 = 0; i0 < ne00; i0++) {
-                    uint64_t src0_index = (i3*nb03 + i2*nb02 + i1*nb01 + i0*nb00);
-                    uint64_t dst_index  = (i3*nb3  + i2*nb2  + i1*nb1  + i0*nb0 );
-                    uint32_t src0_blk = src0_index/DMA_MMAP_SIZE;
-                    uint32_t dst_blk  = dst_index/DMA_MMAP_SIZE;
-                    float* src0 = &src0_p[src0_blk][src0_index%DMA_MMAP_SIZE];
-                    float* dst  = &dst_p [dst_blk ][dst_index%DMA_MMAP_SIZE ];
-                    *dst = *src0 * *src0;
+                    dst[i0] = src0[i0] * src0[i0];
                 }
             }
         }
@@ -684,47 +648,37 @@ void* kernel_rms_norm(struct imax_kernel_args* args) {
 
 void kernel_norm_f32(struct imax_kernel_args* args) {
     GGML_IMAX_KERNEL_LOG_DEBUG("%s", __func__);
+    load_src01_dst(args);
 
     GGML_ASSERT(args->src0_type == GGML_TYPE_F32);
+    GGML_ASSERT(args->dst_type == GGML_TYPE_F32);
 
     const float eps = 1e-6f;
 
-    void** src0_p = args->src0;
-    void** src1_p = args->src1;
-    void** dst_p  = args->dst;
-
-    for (int64_t i03 = 0; i03 < args->src0_ne[3]; i03++) {
-        for (int64_t i02 = 0; i02 < args->src0_ne[2]; i02++) {
-            for (int64_t i01 = 0; i01 < args->src0_ne[1]; i01++) {
-
+    for (int64_t i03 = 0; i03 < ne03; i03++) {
+        for (int64_t i02 = 0; i02 < ne02; i02++) {
+            for (int64_t i01 = 0; i01 < ne01; i01++) {
                 double sum = 0.0;
-                for (int64_t i00 = 0; i00 < args->src0_ne[0]; i00++) {
-                    uint64_t src0_index = (i03*args->src0_nb[3] + i02*args->src0_nb[2] + i01*args->src0_nb[1] + i00*args->src0_nb[0]);
-                    uint64_t src0_blk = src0_index/DMA_MMAP_SIZE;
-                    sum += (double)(*(float *) (&src0_p[src0_blk][src0_index%DMA_MMAP_SIZE]));
+                float* src0 = (float*)&src0_p[i03*nb03 + i02*nb02 + i01*nb01];
+                float* dst = (float*)&dst_p[i03*nb3 + i02*nb2 + i01*nb1];
+                for (int64_t i00 = 0; i00 < ne00; i00++) {
+                    sum += (double)src0[i00];
                 }
 
-                float mean = sum/args->src0_ne[0];
+                float mean = sum/ne00;
 
                 double sum2 = 0.0;
-                for (int64_t i00 = 0; i00 < args->src0_ne[0]; i00++) {
-                    uint64_t src0_index = (i03*args->src0_nb[3] + i02*args->src0_nb[2] + i01*args->src0_nb[1] + i00*args->src0_nb[0]);
-                    uint64_t src0_blk = src0_index/DMA_MMAP_SIZE;
-                    uint64_t dst_index  = (i03*args->dst_nb[3] + i02*args->dst_nb[2] + i01*args->dst_nb[1] + i00*args->dst_nb[0]);
-                    uint64_t dst_blk  = dst_index/DMA_MMAP_SIZE;
-                    float x = (float)(*(float *) (&src0_p[src0_blk][src0_index%DMA_MMAP_SIZE]));
+                for (int64_t i00 = 0; i00 < ne00; i00++) {
+                    float x = src0[i00];
                     float v = x - mean;
-                    *(float *) (&dst_p[dst_blk][dst_index%DMA_MMAP_SIZE]) = v;
+                    dst[i00] = v;
                     sum2 += (double) (v*v);
                 }
 
-                float variance = sum2/args->src0_ne[0];
+                float variance = sum2/ne00;
                 const float scale = 1.0f/sqrtf(variance + eps);
-
-                for (int64_t i00 = 0; i00 < args->src0_ne[0]; i00++) {
-                    uint64_t dst_index  = (i03*args->dst_nb[3] + i02*args->dst_nb[2] + i01*args->dst_nb[1] + i00*args->dst_nb[0]);
-                    uint64_t dst_blk  = dst_index/DMA_MMAP_SIZE;
-                    *(float *) (&dst_p[dst_blk][dst_index%DMA_MMAP_SIZE]) *= scale;
+                for (int64_t i00 = 0; i00 < ne00; i00++) {
+                    dst[i00] *= scale;
                 }
             }
         }
@@ -755,35 +709,25 @@ void* kernel_group_norm(struct imax_kernel_args* args) {
 
 static void kernel_get_rows_q(struct imax_kernel_args* args) {
     GGML_IMAX_KERNEL_LOG_DEBUG("%s", __func__);
+    load_src01_dst(args);
 
-    int64_t nc = args->src0_ne[0];
-    int64_t nr = args->src1_ne[0]*args->src1_ne[1]*args->src1_ne[2]*args->src1_ne[3];
+    int64_t nc = ne00;
+    int64_t nr = ne10 * ne11 * ne12 * ne13;
 
-    GGML_ASSERT(args->dst_ne[0] == args->src0_ne[0]);
-    GGML_ASSERT(args->src0_ne[2] == args->src1_ne[1]);
-    GGML_ASSERT(args->src0_nb[0] == sizeof(ggml_fp16_t));
-    GGML_ASSERT(args->dst_ne[1]*args->dst_ne[2]*args->dst_ne[3] == nr);
+    GGML_ASSERT(ne0 == ne00);
+    GGML_ASSERT(ne02 == ne11);
+    GGML_ASSERT(nb00 == sizeof(ggml_fp16_t)); // TODO: row_q
+    GGML_ASSERT(ne1*ne2*ne3 == nr);
 
     ggml_to_float_t dequantize_row_q = type_traits[args->src0_type].to_float;
 
-    void** src0_p = args->src0;
-    void** src1_p = args->src1;
-    void** dst_p  = args->dst;
-
-    for (int64_t i12 = 0; i12 < args->src1_ne[2]; i12++) {
-        for (int64_t i11 = 0; i11 < args->src1_ne[1]; i11++) {
-            for (int64_t i10 = 0; i10 < args->src1_ne[0]; i10++) {
-                uint64_t src1_index = (i12*args->src1_nb[2] + i11*args->src1_nb[1] + i10*args->src1_nb[0]);
-                uint64_t src1_blk = src1_index/DMA_MMAP_SIZE;
-                const int64_t i01 = *(int32_t *)((char *)&src1_p[src1_blk][src1_index%DMA_MMAP_SIZE]);
-
-                uint64_t src0_index = (i12*args->src0_nb[3] + i11*args->src0_nb[2] + i01*args->src0_nb[1]);
-                uint64_t src0_blk = src0_index/DMA_MMAP_SIZE;
-                uint64_t dst_index  = (i12*args->dst_nb[3] + i11*args->dst_nb[2] + i10*args->dst_nb[1]);
-                uint64_t dst_blk  = dst_index/DMA_MMAP_SIZE;
+    for (int64_t i12 = 0; i12 < ne12; i12++) {
+        for (int64_t i11 = 0; i11 < ne11; i11++) {
+            for (int64_t i10 = 0; i10 < ne10; i10++) {
+                const int64_t i01 = *(int32_t *)(&src1_p[i12*nb12 + i11*nb11 + i10*nb10]);
                 dequantize_row_q(
-                    (const void *) (&src0_p[src0_blk][src0_index%DMA_MMAP_SIZE]),
-                    (void *) (&dst_p[dst_blk][dst_index%DMA_MMAP_SIZE]), nc
+                    (const void *) (&src0_p[i12*nb03 + i11*nb02 + i01*nb01]),
+                    (void *) (&dst_p[i12*nb3 + i11*nb2 + i10*nb1]), nc
                 );
             }
         }
@@ -792,33 +736,26 @@ static void kernel_get_rows_q(struct imax_kernel_args* args) {
 
 static void kernel_get_rows_f16(struct imax_kernel_args* args) {
     GGML_IMAX_KERNEL_LOG_DEBUG("%s", __func__);
+    load_src01_dst(args);
 
-    int64_t nc = args->src0_ne[0];
-    int64_t nr = args->src1_ne[0]*args->src1_ne[1]*args->src1_ne[2]*args->src1_ne[3];
+    int64_t nc = ne00;
+    int64_t nr = ne10 * ne11 * ne12 * ne13;
 
-    GGML_ASSERT(args->dst_ne[0] == args->src0_ne[0]);
-    GGML_ASSERT(args->src0_ne[2] == args->src1_ne[1]);
-    GGML_ASSERT(args->src0_nb[0] == sizeof(ggml_fp16_t));
-    GGML_ASSERT(args->dst_ne[1]*args->dst_ne[2]*args->dst_ne[3] == nr);
+    GGML_ASSERT(ne0 == ne00);
+    GGML_ASSERT(ne02 == ne11);
+    GGML_ASSERT(nb00 == sizeof(ggml_fp16_t));
+    GGML_ASSERT(ne1*ne2*ne3 == nr);
 
-    void** src0_p = args->src0;
-    void** src1_p = args->src1;
-    void** dst_p  = args->dst;
-
-    for (int64_t i12 = 0; i12 < args->src1_ne[2]; i12++) {
-        for (int64_t i11 = 0; i11 < args->src1_ne[1]; i11++) {
-            for (int64_t i10 = 0; i10 < args->src1_ne[0]; i10++) {
-                uint64_t src1_index = (i12*args->src1_nb[2] + i11*args->src1_nb[1] + i10*args->src1_nb[0]);
-                uint64_t src1_blk = src1_index/DMA_MMAP_SIZE;
-                const int64_t i01 = *(int32_t *)((char *)&src1_p[src1_blk][src1_index%DMA_MMAP_SIZE]);
+    for (int64_t i12 = 0; i12 < ne12; i12++) {
+        for (int64_t i11 = 0; i11 < ne11; i11++) {
+            float* dst = (float*)&dst_p[i12*nb3 + i11*nb2];
+            ggml_fp16_t* src0 = (ggml_fp16_t*)&src0_p[i12*nb03 + i11*nb02];
+            for (int64_t i10 = 0; i10 < ne10; i10++) {
+                const int64_t i01 = *(int32_t *)(&src1_p[i12*nb12 + i11*nb11 + i10*nb10]);
 
                 // TODO: SIMD
                 for (int64_t i0 = 0; i0 < nc; i0++) {
-                    uint64_t src0_index = (i12*args->src0_nb[3] + i11*args->src0_nb[2] + i01*args->src0_nb[1] + i0*args->src0_nb[0]);
-                    uint64_t src0_blk = src0_index/DMA_MMAP_SIZE;
-                    uint64_t dst_index  = (i12*args->dst_nb[3] + i11*args->dst_nb[2] + i10*args->dst_nb[1] + i0*args->dst_nb[0]);
-                    uint64_t dst_blk  = dst_index/DMA_MMAP_SIZE;
-                    *(uint32_t*)&dst_p[dst_blk][dst_index%DMA_MMAP_SIZE] = ggml_fp16_to_fp32(*(ggml_fp16_t*)&src0_p[src0_blk][src0_index%DMA_MMAP_SIZE]);
+                    dst[i0] = ggml_fp16_to_fp32(src0[i0]);
                 }
             }
         }
@@ -827,33 +764,27 @@ static void kernel_get_rows_f16(struct imax_kernel_args* args) {
 
 static void kernel_get_rows_f32(struct imax_kernel_args* args) {
     GGML_IMAX_KERNEL_LOG_DEBUG("%s", __func__);
+    load_src01_dst(args);
 
-    int64_t nc = args->src0_ne[0];
-    int64_t nr = args->src1_ne[0]*args->src1_ne[1]*args->src1_ne[2]*args->src1_ne[3];
+    int64_t nc = ne00;
+    int64_t nr = ne10 * ne11 * ne12 * ne13;
 
-    GGML_ASSERT(args->dst_ne[0] == args->src0_ne[0]);
-    GGML_ASSERT(args->src0_ne[2] == args->src1_ne[1]);
-    GGML_ASSERT(args->src0_nb[0] == sizeof(float));
-    GGML_ASSERT(args->dst_ne[1]*args->dst_ne[2]*args->dst_ne[3] == nr);
+    GGML_ASSERT(ne0 == ne00);
+    GGML_ASSERT(ne02 == ne11);
+    GGML_ASSERT(nb00 == sizeof(float));
+    GGML_ASSERT(ne1*ne2*ne3 == nr);
 
-    void** src0_p = args->src0;
-    void** src1_p = args->src1;
-    void** dst_p  = args->dst;
 
-    for (int64_t i12 = 0; i12 < args->src1_ne[2]; i12++) {
-        for (int64_t i11 = 0; i11 < args->src1_ne[1]; i11++) {
-            for (int64_t i10 = 0; i10 < args->src1_ne[0]; i10++) {
-                uint64_t src1_index = (i12*args->src1_nb[2] + i11*args->src1_nb[1] + i10*args->src1_nb[0]);
-                uint64_t src1_blk = src1_index/DMA_MMAP_SIZE;
-                const int64_t i01 = *(int32_t *)((char *)&src1_p[src1_blk][src1_index%DMA_MMAP_SIZE]);
+    for (int64_t i12 = 0; i12 < ne12; i12++) {
+        for (int64_t i11 = 0; i11 < ne11; i11++) {
+            float* dst = (float*)&dst_p[i12*nb3 + i11*nb2];
+            float* src0 = (float*)&src0_p[i12*nb03 + i11*nb02];
+            for (int64_t i10 = 0; i10 < ne10; i10++) {
+                const int64_t i01 = *(int32_t *)(&src1_p[i12*nb12 + i11*nb11 + i10*nb10]);
 
                 // TODO: SIMD
                 for (int64_t i0 = 0; i0 < nc; i0++) {
-                    uint64_t src0_index = (i12*args->src0_nb[3] + i11*args->src0_nb[2] + i01*args->src0_nb[1] + i0*args->src0_nb[0]);
-                    uint64_t src0_blk = src0_index/DMA_MMAP_SIZE;
-                    uint64_t dst_index  = (i12*args->dst_nb[3] + i11*args->dst_nb[2] + i10*args->dst_nb[1] + i0*args->dst_nb[0]);
-                    uint64_t dst_blk  = dst_index/DMA_MMAP_SIZE;
-                    *(uint32_t*)&dst_p[dst_blk][dst_index%DMA_MMAP_SIZE] = *(uint32_t*)&src0_p[src0_blk][src0_index%DMA_MMAP_SIZE];
+                    dst[i0] = src0[i0];
                 }
             }
         }
@@ -933,12 +864,8 @@ void kernel_alibi_f32(struct imax_kernel_args* args) {
 
         for (int64_t i = 0; i < ne00; i++) {
             for (int64_t j = 0; j < ne01; j++) {
-                    uint64_t src0_index = (k*nb02 + j*nb01 + i*nb00);
-                    uint64_t dst_index  = (k*nb03 + j*nb02 + i*nb01);
-                    uint32_t src0_blk = src0_index/DMA_MMAP_SIZE;
-                    uint32_t dst_blk  = dst_index/DMA_MMAP_SIZE;
-                    float* src0 = &src0_p[src0_blk][src0_index%DMA_MMAP_SIZE];
-                    float* dst  = &dst_p [dst_blk ][dst_index%DMA_MMAP_SIZE ];
+                    float* src0 = (float*)&src0_p[k*nb02 + j*nb01 + i*nb00];
+                    float* dst  = (float*)&dst_p [k*nb03 + j*nb02 + i*nb01];
                     *dst = i * m_k + *src0;
             }
         }
@@ -1002,14 +929,10 @@ void kernel_dup_bytes(struct imax_kernel_args* args) {
         for (int i3 = 0; i3 < ne03; i3++) {
             for (int i2 = 0; i2 < ne02; i2++) {
                 for (int i1 = 0; i1 < ne01; i1++) {
+                    uint8_t* src0 = &src0_p[i3*nb03 + i2*nb02 + i1*nb01];
+                    uint8_t* dst  = &dst_p [i3*nb3  + i2*nb2  + i1*nb1 ];
                     for (int i0 = 0; i0 < ne00; i0++) {
-                        uint64_t src0_index = (i3*nb03 + i2*nb02 + i1*nb01 + i0*nb00);
-                        uint64_t dst_index  = (i3*nb3  + i2*nb2  + i1*nb1  + i0*nb0 );
-                        uint32_t src0_blk = src0_index/DMA_MMAP_SIZE;
-                        uint32_t dst_blk  = dst_index/DMA_MMAP_SIZE;
-                        uint8_t* src0 = &src0_p[src0_blk][src0_index%DMA_MMAP_SIZE];
-                        uint8_t* dst  = &dst_p [dst_blk ][dst_index%DMA_MMAP_SIZE ];
-                        *dst = *src0;
+                        dst[i0] = src0[i0];
                     }
                 }
             }
@@ -1033,14 +956,10 @@ void kernel_dup_f32(struct imax_kernel_args* args) {
         for (int i3 = 0; i3 < ne03; i3++) {
             for (int i2 = 0; i2 < ne02; i2++) {
                 for (int i1 = 0; i1 < ne01; i1++) {
+                    float* src0 = &src0_p[i3*nb03 + i2*nb02 + i1*nb01];
+                    float* dst  = &dst_p [i3*nb3  + i2*nb2  + i1*nb1 ];
                     for (int i0 = 0; i0 < ne00; i0++) {
-                        uint64_t src0_index = (i3*nb03 + i2*nb02 + i1*nb01 + i0*nb00);
-                        uint64_t dst_index  = (i3*nb3  + i2*nb2  + i1*nb1  + i0*nb0 );
-                        uint32_t src0_blk = src0_index/DMA_MMAP_SIZE;
-                        uint32_t dst_blk  = dst_index/DMA_MMAP_SIZE;
-                        float* src0 = &src0_p[src0_blk][src0_index%DMA_MMAP_SIZE];
-                        float* dst  = &dst_p [dst_blk ][dst_index%DMA_MMAP_SIZE ];
-                        *dst = *src0;
+                        dst[i0] = src0[i0];
                     }
                 }
             }

@@ -32,7 +32,7 @@ struct ggml_tensor;
 struct ggml_cgraph;
 
 struct ggml_backend_imax_buffer {
-    void   **data; //data[]: index of block, data[b][n]: data
+    void    *data; //data[]: index of block, data[b][n]: data
     size_t   size;
 };
 
