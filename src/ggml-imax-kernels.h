@@ -18,6 +18,7 @@ struct imax_kernel_args {
     void* src1;
     void* src2;
     void*  dst;
+    void* wdata;
     
     int src0_ne[GGML_MAX_DIMS];
     int src0_nb[GGML_MAX_DIMS];

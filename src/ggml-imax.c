@@ -109,11 +109,11 @@ struct imax_kernel_pipeline* ggml_imax_kernel_queue_pop(struct ggml_imax_kernel_
 }
 
 void* ggml_imax_pipeline_runtime(struct ggml_imax_kernel_queue *queue) {
-    struct imax_kernel_pipeline* pipeline = queue->head;
+    struct imax_kernel_pipeline* pipeline = ggml_imax_kernel_queue_pop(queue);
 
     while(pipeline != NULL) {
         pthread_create(&pipeline->tid, NULL, pipeline->kernel, &pipeline->args);
-        pthread_join(&pipeline->tid, NULL);
+        pthread_join(pipeline->tid, NULL);
         pipeline = ggml_imax_kernel_queue_pop(queue);
     }
 }
@@ -408,7 +408,7 @@ static bool ggml_imax_graph_compute(
     const int n_cb = ctx->n_cb;
     const int n_nodes_per_cb = (n_nodes + n_cb - 1) / n_cb;
 
-    //GGML_IMAX_LOG_INFO("%s: n_nodes = %d, n_cb = %d, n_nodes_per_cb = %d\n", __func__, n_nodes, n_cb, n_nodes_per_cb);
+    // TODO: cb adapt to IMAX LANE
     for (int cb_idx = 0; cb_idx < n_cb; ++cb_idx) {
 
         size_t offs_src0 = 0;
@@ -480,6 +480,7 @@ static bool ggml_imax_graph_compute(
 
             const enum ggml_type src0t = src0 ? src0->type : GGML_TYPE_COUNT;
             const enum ggml_type src1t = src1 ? src1->type : GGML_TYPE_COUNT;
+            const enum ggml_type src2t = src2 ? src2->type : GGML_TYPE_COUNT;
             const enum ggml_type dstt  = dst  ? dst->type  : GGML_TYPE_COUNT;
 
             void* id_src0 = src0 ? ggml_imax_get_buffer(src0, &offs_src0) : NULL;
@@ -488,15 +489,18 @@ static bool ggml_imax_graph_compute(
             void* id_dst  = dst  ? ggml_imax_get_buffer(dst,  &offs_dst)  : NULL;
 
 #define set_src01_dst(args_name) \
-    args_name.src0 = id_src0;\
-    args_name.src1 = id_src1;\
-    args_name.src2 = id_src2;\
+    args_name.src0 = id_src0;args_name.src1 = id_src1;args_name.src2 = id_src2;args_name.dst  = id_dst;             \
+    args_name.src0_type = src0t;args_name.src1_type = src1t;args_name.src2_type = src2t;args_name.dst_type  = dstt; \
+    if(src0 && src0->op_params!=NULL) {memcpy(args_name.src0_op_params, src0->op_params, sizeof(int32_t)*16);}      \
+    if(src1 && src1->op_params!=NULL) {memcpy(args_name.src1_op_params, src1->op_params, sizeof(int32_t)*16);}      \
+    if(src2 && src2->op_params!=NULL) {memcpy(args_name.src2_op_params, src2->op_params, sizeof(int32_t)*16);}      \
+    if(dst  &&  dst->op_params!=NULL) {memcpy(args_name.dst_op_params,   dst->op_params, sizeof(int32_t)*16);}      \
     args_name.src0_ne[0] = ne00;args_name.src0_ne[1] = ne01;args_name.src0_ne[2] = ne02;args_name.src0_ne[3] = ne03;\
     args_name.src0_nb[0] = nb00;args_name.src0_nb[1] = nb01;args_name.src0_nb[2] = nb02;args_name.src0_nb[3] = nb03;\
     args_name.src1_ne[0] = ne10;args_name.src1_ne[1] = ne11;args_name.src1_ne[2] = ne12;args_name.src1_ne[3] = ne13;\
     args_name.src1_nb[0] = nb10;args_name.src1_nb[1] = nb11;args_name.src1_nb[2] = nb12;args_name.src1_nb[3] = nb13;\
-    args_name.dst_ne[0]  = ne0; args_name.dst_ne[1]  = ne1;args_name.dst_ne[2]   = ne2; args_name.dst_ne[3]  = ne3;\
-    args_name.dst_nb[0]  = nb0; args_name.dst_nb[1]  = nb1;args_name.dst_nb[2]   = nb2; args_name.dst_nb[3]  = nb3
+    args_name.dst_ne[0]  = ne0; args_name.dst_ne[1]  = ne1;args_name.dst_ne[2]   = ne2; args_name.dst_ne[3]  =  ne3;\
+    args_name.dst_nb[0]  = nb0; args_name.dst_nb[1]  = nb1;args_name.dst_nb[2]   = nb2; args_name.dst_nb[3]  =  nb3
 
             switch (dst->op) {
                 case GGML_OP_ADD:
@@ -517,7 +521,6 @@ static bool ggml_imax_graph_compute(
                         }
 
                         set_src01_dst(pipeline->args);
-                        pipeline->args.nb = nb;
                         ggml_imax_kernel_queue_push(&(ctx->queue), pipeline);
                     } break;
                 case GGML_OP_MUL_MAT:
@@ -531,17 +534,11 @@ static bool ggml_imax_graph_compute(
                         const unsigned int r2 = ne12/ne02;
                         const unsigned int r3 = ne13/ne03;
 
-                        // find the break-even point where the matrix-matrix kernel becomes more efficient compared
-                        // to the matrix-vector kernel
-                        int ne11_mm_min = 1;
-
                         // MM kernels on IMAX
                         // TODO: extend the matrix fit to the kernel size
                         if (!ggml_is_transposed(src0) &&
                             !ggml_is_transposed(src1) &&
-                            src1t == GGML_TYPE_F32 &&
-                            ne00 % 32 == 0 && ne00 >= 64 &&
-                            (ne11 > ne11_mm_min || (ggml_is_quantized(src0t) && ne12 > 1))) {
+                            src1t == GGML_TYPE_F32) {
 
                             struct imax_kernel_pipeline* pipeline = NULL;
 
@@ -582,7 +579,8 @@ static bool ggml_imax_graph_compute(
 
                         const bool inplace = (bool) ((int32_t*) dst->op_params)[4];
 
-                        const struct imax_kernel_pipeline* pipeline = ctx->kernels[GGML_IMAX_KERNEL_TYPE_ADD];
+                        struct imax_kernel_pipeline* pipeline = ctx->kernels[GGML_IMAX_KERNEL_TYPE_ADD];
+                        set_src01_dst(pipeline->args);
                         ggml_imax_kernel_queue_push(&(ctx->queue), pipeline);
                     } break;
                 case GGML_OP_SCALE:
@@ -596,6 +594,7 @@ static bool ggml_imax_graph_compute(
                         struct imax_kernel_pipeline* pipeline = NULL;
 
                         pipeline = ctx->kernels[GGML_IMAX_KERNEL_TYPE_SCALE];
+                        set_src01_dst(pipeline->args);
                         ggml_imax_kernel_queue_push(&(ctx->queue), pipeline);
                     } break;
                 case GGML_OP_SUM_ROWS:
@@ -603,6 +602,7 @@ static bool ggml_imax_graph_compute(
                         GGML_ASSERT(src0->nb[0] == ggml_type_size(src0->type));
 
                         struct imax_kernel_pipeline* pipeline = ctx->kernels[GGML_IMAX_KERNEL_TYPE_SUM_ROWS];
+                        set_src01_dst(pipeline->args);
                         ggml_imax_kernel_queue_push(&(ctx->queue), pipeline);
                     } break;
                 case GGML_OP_UPSCALE:
@@ -611,7 +611,8 @@ static bool ggml_imax_graph_compute(
 
                         const int sf = dst->op_params[0];
 
-                        const struct imax_kernel_pipeline* pipeline = ctx->kernels[GGML_IMAX_KERNEL_TYPE_UPSCALE_F32];
+                        struct imax_kernel_pipeline* pipeline = ctx->kernels[GGML_IMAX_KERNEL_TYPE_UPSCALE_F32];
+                        set_src01_dst(pipeline->args);
                         ggml_imax_kernel_queue_push(&(ctx->queue), pipeline);
                     } break;
                 case GGML_OP_PAD:
@@ -619,6 +620,7 @@ static bool ggml_imax_graph_compute(
                         GGML_ASSERT(src0->type == GGML_TYPE_F32);
 
                         struct imax_kernel_pipeline* pipeline = ctx->kernels[GGML_IMAX_KERNEL_TYPE_PAD_F32];
+                        set_src01_dst(pipeline->args);
                         ggml_imax_kernel_queue_push(&(ctx->queue), pipeline);
                     } break;
                 case GGML_OP_ARGSORT:
@@ -637,6 +639,7 @@ static bool ggml_imax_graph_compute(
                             case GGML_SORT_ORDER_DESC: pipeline = ctx->kernels[GGML_IMAX_KERNEL_TYPE_ARGSORT_F32_I32_DESC]; break;
                             default: GGML_ASSERT(false);
                         };
+                        set_src01_dst(pipeline->args);
                         ggml_imax_kernel_queue_push(&(ctx->queue), pipeline);
                     } break;
                 case GGML_OP_DIV:

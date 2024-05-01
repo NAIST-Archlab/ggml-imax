@@ -322,31 +322,33 @@ static const ggml_type_traits_t type_traits[GGML_TYPE_COUNT] = {
 #define load_src01_dst(args_name) \
     uint8_t* src0_p =  (uint8_t*)args_name->src0;      \
     uint8_t* src1_p =  (uint8_t*)args_name->src1;      \
+    uint8_t* src2_p =  (uint8_t*)args_name->src2;      \
     uint8_t* dst_p  =  (uint8_t*)args_name->dst;       \
-    uint64_t    ne00 =  *(uint64_t*)&args_name->src0_ne[0];\
-    uint64_t    ne01 =  *(uint64_t*)&args_name->src0_ne[1];\
-    uint64_t    ne02 =  *(uint64_t*)&args_name->src0_ne[2];\
-    uint64_t    ne03 =  *(uint64_t*)&args_name->src0_ne[3];\
-    uint64_t    nb00 =  *(uint64_t*)&args_name->src0_nb[0];\
-    uint64_t    nb01 =  *(uint64_t*)&args_name->src0_nb[1];\
-    uint64_t    nb02 =  *(uint64_t*)&args_name->src0_nb[2];\
-    uint64_t    nb03 =  *(uint64_t*)&args_name->src0_nb[3];\
-    uint64_t    ne10 =  *(uint64_t*)&args_name->src1_ne[0];\
-    uint64_t    ne11 =  *(uint64_t*)&args_name->src1_ne[1];\
-    uint64_t    ne12 =  *(uint64_t*)&args_name->src1_ne[2];\
-    uint64_t    ne13 =  *(uint64_t*)&args_name->src1_ne[3];\
-    uint64_t    nb10 =  *(uint64_t*)&args_name->src1_nb[0];\
-    uint64_t    nb11 =  *(uint64_t*)&args_name->src1_nb[1];\
-    uint64_t    nb12 =  *(uint64_t*)&args_name->src1_nb[2];\
-    uint64_t    nb13 =  *(uint64_t*)&args_name->src1_nb[3];\
-    uint64_t    ne0  =  *(uint64_t*)&args_name->dst_ne[0]; \
-    uint64_t    ne1  =  *(uint64_t*)&args_name->dst_ne[1]; \
-    uint64_t    ne2  =  *(uint64_t*)&args_name->dst_ne[2]; \
-    uint64_t    ne3  =  *(uint64_t*)&args_name->dst_ne[3]; \
-    uint64_t    nb0  =  *(uint64_t*)&args_name->dst_nb[0]; \
-    uint64_t    nb1  =  *(uint64_t*)&args_name->dst_nb[1]; \
-    uint64_t    nb2  =  *(uint64_t*)&args_name->dst_nb[2]; \
-    uint64_t    nb3  =  *(uint64_t*)&args_name->dst_nb[3]; \
+    uint8_t* wdata = (uint8_t*)args_name->wdata;       \
+    uint64_t    ne00 =  args_name->src0_ne[0];\
+    uint64_t    ne01 =  args_name->src0_ne[1];\
+    uint64_t    ne02 =  args_name->src0_ne[2];\
+    uint64_t    ne03 =  args_name->src0_ne[3];\
+    uint64_t    nb00 =  args_name->src0_nb[0];\
+    uint64_t    nb01 =  args_name->src0_nb[1];\
+    uint64_t    nb02 =  args_name->src0_nb[2];\
+    uint64_t    nb03 =  args_name->src0_nb[3];\
+    uint64_t    ne10 =  args_name->src1_ne[0];\
+    uint64_t    ne11 =  args_name->src1_ne[1];\
+    uint64_t    ne12 =  args_name->src1_ne[2];\
+    uint64_t    ne13 =  args_name->src1_ne[3];\
+    uint64_t    nb10 =  args_name->src1_nb[0];\
+    uint64_t    nb11 =  args_name->src1_nb[1];\
+    uint64_t    nb12 =  args_name->src1_nb[2];\
+    uint64_t    nb13 =  args_name->src1_nb[3];\
+    uint64_t    ne0  =  args_name->dst_ne[0]; \
+    uint64_t    ne1  =  args_name->dst_ne[1]; \
+    uint64_t    ne2  =  args_name->dst_ne[2]; \
+    uint64_t    ne3  =  args_name->dst_ne[3]; \
+    uint64_t    nb0  =  args_name->dst_nb[0]; \
+    uint64_t    nb1  =  args_name->dst_nb[1]; \
+    uint64_t    nb2  =  args_name->dst_nb[2]; \
+    uint64_t    nb3  =  args_name->dst_nb[3]; \
     int32_t* src0_op_params = args_name->src0_op_params;  \
     int32_t* src1_op_params = args_name->src1_op_params;  \
     int32_t* src2_op_params = args_name->src2_op_params;  \
@@ -407,12 +409,63 @@ void* kernel_pad_f32(struct imax_kernel_args* args) {
 
 void* kernel_argsort_f32_i32_asc(struct imax_kernel_args* args) {
     GGML_IMAX_KERNEL_LOG_DEBUG("%s", __func__);
+    load_src01_dst(args);
+
+    const int64_t nr = ne01*ne02*ne03;
+
+    GGML_ASSERT(nb0 == sizeof(float));
+
+    for (int64_t i = 0; i < nr; i++) {
+        int32_t *dst_data = (int32_t*)((char*)dst_p + i*nb1);
+        const float *src_data = (float*)((char*)src0_p + i*nb01);
+
+        for (int64_t j = 0; j < ne0; j++) {
+            dst_data[j] = j;
+        }
+
+        // TODO: change the sort argorithm
+        for (int64_t j = 0; j < ne0; j++) {
+            for (int64_t k = j + 1; k < ne0; k++) {
+                if (src_data[dst_data[j]] > src_data[dst_data[k]]) {
+                    int32_t tmp = dst_data[j];
+                    dst_data[j] = dst_data[k];
+                    dst_data[k] = tmp;
+                }
+            }
+        }
+    }
+    
     return NULL;
 
 }
 
 void* kernel_argsort_f32_i32_desc(struct imax_kernel_args* args) {
     GGML_IMAX_KERNEL_LOG_DEBUG("%s", __func__);
+    load_src01_dst(args);
+
+    const int64_t nr = ne01*ne02*ne03;
+
+    GGML_ASSERT(nb0 == sizeof(float));
+
+    for (int64_t i = 0; i < nr; i++) {
+        int32_t *dst_data = (int32_t*)((char*)dst_p + i*nb1);
+        const float *src_data = (float*)((char*)src0_p + i*nb01);
+
+        for (int64_t j = 0; j < ne0; j++) {
+            dst_data[j] = j;
+        }
+
+        // TODO: change the sort argorithm
+        for (int64_t j = 0; j < ne0; j++) {
+            for (int64_t k = j + 1; k < ne0; k++) {
+                if (src_data[dst_data[j]] < src_data[dst_data[k]]) {
+                    int32_t tmp = dst_data[j];
+                    dst_data[j] = dst_data[k];
+                    dst_data[k] = tmp;
+                }
+            }
+        }
+    }
     return NULL;
 }
 
@@ -560,25 +613,22 @@ void* kernel_sqr(struct imax_kernel_args* args) {
 // TODO: Fit IMAX
 void* kernel_softmax(struct imax_kernel_args* args) {
     GGML_IMAX_KERNEL_LOG_DEBUG("%s", __func__);
+    load_src01_dst(args);
 
-    //void** src0_p = args->src0;
-    //void** src1_p = args->src1;
-    //void** dst_p  = args->dst;
+    float scale    = 1.0f;
+    float max_bias = 0.0f;
 
-    //float scale    = 1.0f;
-    //float max_bias = 0.0f;
+    memcpy(&scale,    (float *) dst_op_params + 0, sizeof(float));
+    memcpy(&max_bias, (float *) dst_op_params + 1, sizeof(float));
 
-    //memcpy(&scale,    (float *) dst->op_params + 0, sizeof(float));
-    //memcpy(&max_bias, (float *) dst->op_params + 1, sizeof(float));
+    const uint32_t n_head_kv   = ne02;
+    const uint32_t n_head_log2 = 1u << (uint32_t) floor(log2(n_head_kv));
 
-    //const uint32_t n_head_kv   = ne02;
-    //const uint32_t n_head_log2 = 1u << (uint32_t) floor(log2(n_head_kv));
+    const float m0 = powf(2.0f, -(max_bias       ) / n_head_log2);
+    const float m1 = powf(2.0f, -(max_bias / 2.0f) / n_head_log2);
 
-    //const float m0 = powf(2.0f, -(max_bias       ) / n_head_log2);
-    //const float m1 = powf(2.0f, -(max_bias / 2.0f) / n_head_log2);
-
-    //const int nc = args->src0_ne[0];
-    //const int nr = args->src1_ne[0]*args->src1_ne[1]*args->src1_ne[2]*args->src1_ne[3];
+    const int nc = ne00;
+    const int nr = ne10*ne11*ne12*ne13;
 
     //// rows per thread
     //const int dr = (nr + nth - 1)/nth;
@@ -588,62 +638,109 @@ void* kernel_softmax(struct imax_kernel_args* args) {
     //const int ir1 = MIN(ir0 + dr, nr);
 
 
-    //// when max_bias <= 0.0f, src2 is not used and we default it to src0 to avoid branching
-    //float * pos = src2 ? (float *) src2->data : src0->data;
+    // when max_bias <= 0.0f, src2 is not used and we default it to src0 to avoid branching
+    float * pos = src2_p ? (float *) src2_p : src0_p;
 
-    //for (int i1 = 0; i1 < nr; i1++) {
-        //for (int i0 = 0; i0 < nc; i0++) {
-            //float * sp = (float *)((char *) src0->data + i1*src0->nb[1]);
-            //float * wp = (float *) params->wdata + (nc + CACHE_LINE_SIZE_F32) * ith; 
-            //float * mp = src1 ? (float *)((char *) src1->data + (i1%ne11)*src1->nb[1]) : NULL;
+    for (int i1 = 0; i1 < nr; i1++) {
+        float * sp = (float *)((char *) src0_p + i1*nb01);
+        float * wp = (float *) wdata; 
+        float * mp = src1_p ? (float *)((char *) src1_p + (i1%ne11)*nb11) : NULL;
+        float * dp = (float *)((char *) dst_p + i1*nb1);
+        for (int i0 = 0; i0 < nc; i0++) {
+            wp[i0] *= scale * sp[i0];
+            if (mp)  {
+                wp[i0] += mp[i0];
+            }
+        }
 
-            //*wp *= scale *sp;
-            //if (mp)  {
-                //*wp += *mp;
-            //}
-        //}        
+        if (max_bias > 0.0f) {
+            const uint32_t h = (i1/ne01)%ne02;
 
-        //for (max_bias > 0.0f) {
-            //const uint32_t h = (i1/ne01)%ne02;
+            const float slope = h < n_head_log2 ? powf(m0, h + 1) : powf(m1, 2*(h - n_head_log2) + 1);
 
-            //const float slope = h < n_head_log2 ? powf(m0, h + 1) : powf(m1, 2*(h - n_head_log2) + 1);
+            for (int i = 0; i < nc; i++) {
+                wp[i] = wp[i] + slope*pos[i];
+            }
+        }
 
-            //for (int i = 0; i < nc; i++) {
-                //wp[i] = wp[i] + slope*pos[i];
-            //}
-        //}
+        float max = -INFINITY;
+        for (int i = 0; i < nc; i++) {
+            if (wp[i] > max) {
+                max = wp[i];
+            }
+        }
 
-        //float max = -INFINITY;
-        //ggml_vec_max_f32(nc, &max, wp);
+        double sum = 0.0;
 
-        //ggml_float sum = 0.0;
+        for (int i = 0; i < nc; i++) {
+            if (wp[i] == -INFINITY) {
+                dp[i] = 0.0f;
+            } else {
+                const float val = (wp[i] == -INFINITY) ? 0.0 : exp(wp[i] - max);
+                sum += (double)val;
+                dp[i] = val;
+            }
+        }
 
-        //uint16_t scvt;
-        //for (int i = 0; i < nc; i++) {
-            //if (wp[i] == -INFINITY) {
-                //dp[i] = 0.0f;
-            //} else {
-                //// const float val = (wp[i] == -INFINITY) ? 0.0 : exp(wp[i] - max);
-                //ggml_fp16_t s = GGML_FP32_TO_FP16(wp[i] - max);
-                //memcpy(&scvt, &s, sizeof(scvt));
-                //const float val = GGML_FP16_TO_FP32(ggml_table_exp_f16[scvt]);
-                //sum += (ggml_float)val;
-                //dp[i] = val;
-            //}
-        //}
-
-        //sum = 1.0/sum;
-        //ggml_vec_scale_f32(nc, dp, sum);
-    //}
+        sum = 1.0/sum;
+        for (int i = 0; i < nc; i++) {
+            dp[i] *= sum;
+        }
+    }
 
     return NULL;
+}
 
+void kernel_rms_norm_f32(struct imax_kernel_args* args) {
+    GGML_IMAX_KERNEL_LOG_DEBUG("%s", __func__);
+    load_src01_dst(args);
+
+    GGML_ASSERT(nb00 == sizeof(float));
+
+    float eps = ((float*)dst_op_params)[0];
+
+    // TODO: optimize
+    for (int64_t i03 = 0; i03 < ne03; i03++) {
+        for (int64_t i02 = 0; i02 < ne02; i02++) {
+            for (int64_t i01 = 0; i01 < ne01; i01++) {
+                const float * x = (float *) ((char *) src0_p + i01*nb01 + i02*nb02 + i03*nb03);
+
+                double sum = 0.0;
+                for (int64_t i00 = 0; i00 < ne00; i00++) {
+                    sum += (double)(x[i00] * x[i00]);
+                }
+
+                const float mean = sum/ne00;
+
+                float * y = (float *) ((char *) dst_p + i01*nb1 + i02*nb2 + i03*nb3);
+
+                for (int i00 = 0; i00 < ne00; i00++) {
+                    y[i00] = x[i00];
+                }
+
+                const float scale = 1.0f/sqrtf(mean + eps);
+
+                for (int i00 = 0; i00 < ne00; i00++) {
+                    y[i00] *= scale;
+                }
+            }
+        }
+    }
 }
 
 void* kernel_rms_norm(struct imax_kernel_args* args) {
     GGML_IMAX_KERNEL_LOG_DEBUG("%s", __func__);
-    return NULL;
 
+    switch (args->src0_type) {
+        case GGML_TYPE_F32: {
+            kernel_rms_norm_f32(args);
+        } break;
+        default: {
+            GGML_ASSERT(false);
+        } break;
+    }
+
+    return NULL;
 }
 
 void kernel_norm_f32(struct imax_kernel_args* args) {
@@ -773,7 +870,6 @@ static void kernel_get_rows_f32(struct imax_kernel_args* args) {
     GGML_ASSERT(ne02 == ne11);
     GGML_ASSERT(nb00 == sizeof(float));
     GGML_ASSERT(ne1*ne2*ne3 == nr);
-
 
     for (int64_t i12 = 0; i12 < ne12; i12++) {
         for (int64_t i11 = 0; i11 < ne11; i11++) {
