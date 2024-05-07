@@ -3,8 +3,8 @@
 
 #include "ggml-backend-impl.h"
 #include "ggml.h"
-#include "emax7.h"
-#include "emax7lib.h"
+#include "../conv-c2d/emax7.h"
+#include "../conv-c2d/emax7lib.h"
 
 #include <pthread.h>
 #include <stdio.h>

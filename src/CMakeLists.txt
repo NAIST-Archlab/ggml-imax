@@ -321,8 +321,23 @@ if (GGML_METAL)
 endif()
 
 if (GGML_IMAX)
-    set(GGML_IMAX_SOURCES ggml-imax.c ggml-imax.h emax7.h emax7lib.h ggml-imax-kernels.c ggml-imax-kernels-cpu.c ggml-imax-kernels.h)
-    set(GGML_EXTRA_FLAGS ${GGML_EXTRA_FLAGS} -DGGML_USE_IMAX -DEMAX7 -DARMZYNQ)
+    set(GGML_IMAX_SOURCES ../conv-c2d/emax7.h ../conv-c2d/emax7lib.h ../conv-c2d/emax7lib.h ../conv-c2d/emax7lib.c)
+    set(GGML_IMAX_SOURCES ${GGML_IMAX_SOURCES} ggml-imax.c ggml-imax.h ggml-imax-kernels.h ggml-imax-kernels-cpu.c)
+    if (GGML_IMAX_NC)
+        set(GGML_IMAX_SOURCES ${GGML_IMAX_SOURCES} ggml-imax-kernels.c)
+    else()
+        add_custom_command(
+            OUTPUT ggml-imax-kernels-emax7.c
+            DEPENDS ggml-imax-kernels.c
+            COMMAND ${CMAKE_SOURCE_DIR}/conv-mark/conv-mark ${CMAKE_SOURCE_DIR}/src/ggml-imax-kernels.c > ggml-imax-kernels.c-mark.c
+            COMMAND cpp -P -DGGML_USE_IMAX -DEMAX7 -DARMZYNQ -DFPDDMA -I${CMAKE_SOURCE_DIR}/include/ggml -I${CMAKE_SOURCE_DIR}/src/conv-c2d -I${CMAKE_SOURCE_DIR}/src ggml-imax-kernels.c-mark.c > ggml-imax-kernels.c-cppo.c
+            COMMAND ${CMAKE_SOURCE_DIR}/conv-c2d/conv-c2d ggml-imax-kernels.c-cppo.c
+        )
+        add_custom_target(GGML_IMAX_KERNEL_GEN DEPENDS ggml-imax-kernels-emax7.c)
+        target_sources(GGML_IMAX_KERNEL_GEN PRIVATE ggml-imax-kernels-emax7.c)
+        set(GGML_IMAX_SOURCES ${GGML_IMAX_SOURCES} ggml-imax-kernels-emax7.c)
+    endif()
+    set(GGML_EXTRA_FLAGS ${GGML_EXTRA_FLAGS} -DGGML_USE_IMAX -DEMAX7 -DARMZYNQ -DFPDDMA)
 endif()
 
 

@@ -1,0 +1,6 @@
+[submodule "conv-mark"]
+	path = conv-mark
+	url = git@github.com:NAIST-Archlab/conv-mark.git
+[submodule "conv-c2d"]
+	path = conv-c2d
+	url = git@github.com:NAIST-Archlab/conv-mark.git

@@ -1,8 +1,8 @@
 #include "ggml-imax-kernels.h"
 #include "ggml.h"
 #include "ggml-quants.h"
-#include "emax7.h"
-#include "emax7lib.h"
+#include "../conv-c2d/emax7.h"
+#include "../conv-c2d/emax7lib.h"
 
 #include <stdio.h>
 
@@ -145,7 +145,7 @@ void *kernel_mul_mm_q4_0_f32(struct imax_kernel_args *args) {
     const size_t bs = sizeof(float) + QK / 2; /* 20B */
 
 //#if !defined(EMAX7)
-#if 1
+#if 0
     // nb01 >= nb00 - src0 is not transposed. compute by src0 rows
     // rows per thread
     const int dr = (nr + nth - 1) / nth;
@@ -194,10 +194,10 @@ void *kernel_mul_mm_q4_0_f32(struct imax_kernel_args *args) {
         }
     }
 #else
-    if (ith != 0 || nth != 1 || src0->n_dims > 2 || src1->n_dims > 2) {
-        printf("imax_ggml_compute_forward_mul_mat_q4_0_f32: ith=%d(!=0), nth=%d(!=1), src0->n_dims=%d(>2), src1->n_dims=%d(>2)\n", ith, nth, src0->n_dims, src1->n_dims);
-        exit(1);
-    }
+    //if (ith != 0 || nth != 1 || src0->n_dims > 2 || src1->n_dims > 2) {
+        //printf("imax_ggml_compute_forward_mul_mat_q4_0_f32: ith=%d(!=0), nth=%d(!=1), src0->n_dims=%d(>2), src1->n_dims=%d(>2)\n", ith, nth, src0->n_dims, src1->n_dims);
+        //exit(1);
+    //}
     if (ne02 != 1 || ne03 != 1 || ne12 != 1 || ne13 != 1 || ne2 != 1 || ne3 != 1) {
         printf("imax_ggml_compute_forward_mul_mat_q4_0_f32: ne02=%d(!=1), ne03=%d(!=1), ne12=%d(!=1), ne13=%d(!=1), ne2=%d(!=1), ne3=%d(!=1)\n", ne02, ne03, ne12, ne13, ne2, ne3);
         exit(1);
@@ -224,6 +224,7 @@ void *kernel_mul_mm_q4_0_f32(struct imax_kernel_args *args) {
     Ull BS = ((Ull)bs) << 32 | (((Ull)0LL) & 0xffffffffLL);
     Ull NE01NE11 = ne01 * ne11; /* 50288 * 5    :  251440 (1MB)   max LMM words of dst_col */
     Ull Force = 1;              /* force wdat load to LMM */
+    int LANE = 0;
 
     static int nrnb01d4;
     static int nbnb00d4;
@@ -304,7 +305,7 @@ void *kernel_mul_mm_q4_0_f32(struct imax_kernel_args *args) {
     exe(OP_FML3, &d2, BR[r][0][1], EXP_H1010, BR[r][2][1], EXP_H1010, 0x0007000600050004LL, EXP_B5410, OP_NOP, 0LL, OP_NOP, 0LL); \
     exe(OP_FML3, &d3, BR[r][0][1], EXP_H1010, BR[r][2][1], EXP_H1010, 0x0007000600050004LL, EXP_B7632, OP_NOP, 0LL, OP_NOP, 0LL)
 
-// EMAX5A begin mul_mat_q4_0_f32 mapdist=0
+//EMAX5A begin mul_mat_q4_0_f32 mapdist=0
             /*3*/ for (CHIP = 0; CHIP < NCHIP; CHIP++) {                                                                                  /* will be parallelized by multi-chip (M/#chip) */
                 /*2*/ for (INIT1 = 1, LOOP1 = ne11, rofs = MNBNB00_MNE0; LOOP1--; INIT1 = 0) { /* stage#0 */                              /* mapped to FOR() on BR[63][1][0] */
                     /*1*/ for (INIT0 = 1, LOOP0 = nb, cofs = MBS; LOOP0--; INIT0 = 0) { /* stage#0 */                                     /* mapped to FOR() on BR[63][0][0] */
@@ -358,11 +359,11 @@ void *kernel_mul_mm_q4_0_f32(struct imax_kernel_args *args) {
                     }
                 }
             }
-// EMAX5A end
+//EMAX5A end
             if (Force)
                 Force = 0; /* reset wdat load to LMM */
         }
-// EMAX5A drain_dirty_lmm
+//EMAX5A drain_dirty_lmm
         //monitor_time_start(THREAD, IMAX_CPYOUT);
         //xmax_cpyout(2, dst->data, 1, 1, i_m0C[LANE], NE01NE11, 1, 1);
         //monitor_time_end(THREAD, IMAX_CPYOUT);
