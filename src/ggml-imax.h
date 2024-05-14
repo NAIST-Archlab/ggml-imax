@@ -32,18 +32,13 @@ struct ggml_tensor;
 struct ggml_cgraph;
 
 struct ggml_backend_imax_buffer {
-    void    *data; //data[]: index of block, data[b][n]: data
+    void    *data;
     size_t   size;
 };
 
 struct ggml_backend_imax_buffer_context {
-    void * all_data;
-    size_t all_size;
-
-    bool owned;
-
-    int n_buffers;
-    struct ggml_backend_imax_buffer buffers[GGML_IMAX_MAX_BUFFERS];
+    void * data;
+    size_t size;
 };
 
 #ifdef __cplusplus
@@ -61,7 +56,7 @@ GGML_API ggml_backend_t ggml_backend_imax_init(void);
 
 GGML_API bool ggml_backend_is_imax(ggml_backend_t backend);
 
-GGML_API void ggml_backend_imax_set_n_cb(ggml_backend_t backend, int n_cb);
+GGML_API void ggml_backend_imax_set_nlane(ggml_backend_t backend, int nlane);
 
 GGML_API GGML_CALL ggml_backend_buffer_type_t ggml_backend_imax_buffer_type(void);
 

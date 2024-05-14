@@ -781,7 +781,7 @@ bool gpt2_eval(
 
 #ifdef GGML_USE_IMAX
     if (ggml_backend_is_imax(model.backend)) {
-        ggml_backend_imax_set_n_cb(model.backend, n_threads);
+        ggml_backend_imax_set_nlane(model.backend, n_threads);
     }
 #endif
 
