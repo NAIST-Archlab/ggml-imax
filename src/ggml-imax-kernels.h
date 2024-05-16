@@ -40,6 +40,7 @@ struct imax_kernel_args {
     int32_t dst_op_params [16];
 
     int nb;
+    int lane;
 };
 
 // On IMAX + CPU

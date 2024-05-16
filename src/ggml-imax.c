@@ -7,6 +7,7 @@
 #include "../conv-c2d/emax7lib.h"
 
 #include <pthread.h>
+#include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <sys/types.h>
@@ -42,6 +43,7 @@ struct imax_kernel_pipeline {
     int stat;
     sigset_t sigset;
     void* (*kernel)(struct imax_kernel_args*);
+    int nlane;
     struct imax_kernel_args args;
     struct imax_kernel_pipeline* prev;
     struct imax_kernel_pipeline* next;
@@ -108,11 +110,28 @@ struct imax_kernel_pipeline* ggml_imax_kernel_queue_pop(struct ggml_imax_kernel_
     return NULL;
 }
 
+void* ggml_imax_kernel_run(struct imax_kernel_pipeline* pipeline) {
+    struct imax_kernel_args args[EMAX_NLANE];
+    pthread_t tids[EMAX_NLANE];
+
+    for (int i = 0; i < pipeline->nlane; i++) {
+        memcpy(&args[i], &pipeline->args, sizeof(struct imax_kernel_args));
+        args[i].lane = i;
+        pthread_create(&tids[i], NULL, pipeline->kernel, &args[i]);
+    }
+    
+    for (int i = 0; i < pipeline->nlane; i++) {
+        pthread_join(tids[i], NULL);
+    }
+
+    return NULL;
+}
+
 void* ggml_imax_pipeline_runtime(struct ggml_imax_kernel_queue *queue) {
     struct imax_kernel_pipeline* pipeline = ggml_imax_kernel_queue_pop(queue);
 
     while(pipeline != NULL) {
-        pthread_create(&pipeline->tid, NULL, pipeline->kernel, &pipeline->args);
+        pthread_create(&pipeline->tid, NULL, ggml_imax_kernel_run, pipeline);
         pthread_join(pipeline->tid, NULL);
         pipeline = ggml_imax_kernel_queue_pop(queue);
     }
@@ -130,6 +149,7 @@ void ggml_imax_kernel_queue_wait(pthread_t tid) {
 }
 
 void ggml_imax_kernel_queue_run_sync(struct ggml_imax_kernel_queue *queue) {
+    GGML_IMAX_LOG_INFO("%s: pipeline runtime started\n", __func__);
     ggml_imax_kernel_queue_wait(ggml_imax_kernel_queue_run_async(queue));
 }
 
@@ -176,12 +196,12 @@ enum ggml_imax_kernel_type {
 };
 
 struct ggml_imax_context {
-    int n_cb;
+    int nlane;
 
     struct emax7* device;
     struct ggml_imax_kernel_queue queue;
 
-    struct imax_kernel_pipeline* kernels[GGML_IMAX_KERNEL_TYPE_COUNT];
+    void* (*kernels[GGML_IMAX_KERNEL_TYPE_COUNT])(struct imax_kernel_args*);
 };
 
 // TODO: memorize provisional buffers allocation because it is not possible to free it
@@ -203,14 +223,14 @@ static void* ggml_imax_host_malloc(size_t n) {
     return data;
 }
 
-static struct ggml_imax_context* ggml_imax_init(int n_cb) {
+static struct ggml_imax_context* ggml_imax_init(int nlane) {
     GGML_IMAX_LOG_INFO("%s: Initialize IMAX3\n", __func__);
 
 #define EMAX7 // Temp
 #define ARMZYNQ // Temp
 #if defined(EMAX7)
-if (emax7_open(n_cb) == NULL) exit(1);
-for (int i = 0; i < n_cb; i++) {
+if (emax7_open(nlane) == NULL) exit(1);
+for (int i = 0; i < nlane; i++) {
     char* membase = emax_info[i].ddr_mmap;
 #if __AARCH64EL__ == 1
     Dll zero = 0;
@@ -258,7 +278,7 @@ for (int i = 0; i < n_cb; i++) {
     // Configure context
     struct ggml_imax_context* ctx = (struct ggml_imax_context*) malloc(sizeof(struct ggml_imax_context));
     ctx->device = emax7;
-    ctx->n_cb   = MIN(n_cb, GGML_IMAX_MAX_BUFFERS);
+    ctx->nlane   = MIN(nlane, GGML_IMAX_MAX_BUFFERS);
 
     // load kernels
     {
@@ -268,9 +288,7 @@ for (int i = 0; i < n_cb; i++) {
 
 #define GGML_IMAX_ADD_KERNEL(e, name, supported) \
         if (supported) { \
-            struct imax_kernel_pipeline* kernel = malloc(sizeof(struct imax_kernel_pipeline)); \
-            kernel->kernel = kernel_##name; \
-            ctx->kernels[e] = kernel; \
+            ctx->kernels[e] = kernel_##name; \
             GGML_IMAX_LOG_INFO("loading kernel_%-32s\n", #name); \
         } else { \
             GGML_IMAX_LOG_WARN("skipping kernle_%-32s (not supported)\n", #name); \
@@ -334,20 +352,13 @@ static void ggml_imax_free(struct ggml_imax_context * ctx) {
 }
 
 // finds the IMAX buffer
-static void* ggml_imax_get_buffer(struct ggml_tensor * t, size_t * offs) {
+static void* ggml_imax_get_buffer(struct ggml_tensor * t) {
     const int64_t tsize = ggml_nbytes(t);
 
     ggml_backend_buffer_t buffer = t->view_src ? t->view_src->buffer : t->buffer;
     struct ggml_backend_imax_buffer_context * buf_ctx = (struct ggml_backend_imax_buffer_context *) buffer->context;
 
-    // find the view that contains the tensor fully
-    for (int i = 0; i < buf_ctx->n_buffers; ++i) {
-        const int64_t ioffs = (int64_t) buf_ctx->buffers[i].data - (int64_t) buf_ctx->buffers[i].data;
-        if (ioffs >= 0) {
-            *offs = (size_t) ioffs;
-            return buf_ctx->buffers[i].data;
-        }
-    }
+    return buf_ctx->data;
 
     GGML_IMAX_LOG_ERROR("%s: error: tensor '%s' buffer is NULL\n", __func__, t->name);
 
@@ -405,19 +416,13 @@ static bool ggml_imax_graph_compute(
         struct ggml_imax_context * ctx,
                struct ggml_cgraph * gf) {
     const int n_nodes  = gf->n_nodes;
-    const int n_cb = ctx->n_cb;
-    const int n_nodes_per_cb = (n_nodes + n_cb - 1) / n_cb;
+    const int nlane = ctx->nlane;
+    const int n_nodes_per_lane = (n_nodes + nlane - 1) / nlane;
 
-    // TODO: cb adapt to IMAX LANE
-    for (int cb_idx = 0; cb_idx < n_cb; ++cb_idx) {
-
-        size_t offs_src0 = 0;
-        size_t offs_src1 = 0;
-        size_t offs_src2 = 0;
-        size_t offs_dst  = 0;
-
-        const int node_start =                                      (cb_idx + 0) * n_nodes_per_cb;
-        const int node_end   = MIN((cb_idx == n_cb - 1) ? n_nodes : (cb_idx + 1) * n_nodes_per_cb, n_nodes);
+    // TODO: lane adapt to IMAX LANE
+    for (int lane_idx = 0; lane_idx < nlane; ++lane_idx) {
+        const int node_start =                                      (lane_idx + 0) * n_nodes_per_lane;
+        const int node_end   = MIN((lane_idx == nlane - 1) ? n_nodes : (lane_idx + 1) * n_nodes_per_lane, n_nodes);
 
         for (int i = node_start; i < node_end; ++i) {
             if (i == -1) {
@@ -483,10 +488,10 @@ static bool ggml_imax_graph_compute(
             const enum ggml_type src2t = src2 ? src2->type : GGML_TYPE_COUNT;
             const enum ggml_type dstt  = dst  ? dst->type  : GGML_TYPE_COUNT;
 
-            void* id_src0 = src0 ? ggml_imax_get_buffer(src0, &offs_src0) : NULL;
-            void* id_src1 = src1 ? ggml_imax_get_buffer(src1, &offs_src1) : NULL;
-            void* id_src2 = src2 ? ggml_imax_get_buffer(src2, &offs_src2) : NULL;
-            void* id_dst  = dst  ? ggml_imax_get_buffer(dst,  &offs_dst)  : NULL;
+            void* id_src0 = src0 ? ggml_imax_get_buffer(src0) : NULL;
+            void* id_src1 = src1 ? ggml_imax_get_buffer(src1) : NULL;
+            void* id_src2 = src2 ? ggml_imax_get_buffer(src2) : NULL;
+            void* id_dst  = dst  ? ggml_imax_get_buffer( dst)  : NULL;
 
 #define set_src01_dst(args_name) \
     args_name.src0 = id_src0;args_name.src1 = id_src1;args_name.src2 = id_src2;args_name.dst  = id_dst;             \
@@ -512,11 +517,12 @@ static bool ggml_imax_graph_compute(
 
                         int64_t nb = ne00;
 
-                        struct imax_kernel_pipeline* pipeline = NULL;
+                        struct imax_kernel_pipeline* pipeline = (struct imax_kernel_pipeline*) malloc(sizeof(struct imax_kernel_pipeline));
+                        pipeline->nlane = nlane;
 
                         switch (dst->op) {
-                            case GGML_OP_ADD: pipeline = ctx->kernels[GGML_IMAX_KERNEL_TYPE_ADD]; break;
-                            case GGML_OP_MUL: pipeline = ctx->kernels[GGML_IMAX_KERNEL_TYPE_MUL]; break;
+                            case GGML_OP_ADD: pipeline->kernel = ctx->kernels[GGML_IMAX_KERNEL_TYPE_ADD]; break;
+                            case GGML_OP_MUL: pipeline->kernel = ctx->kernels[GGML_IMAX_KERNEL_TYPE_MUL]; break;
                             default: GGML_ASSERT(false);
                         }
 
@@ -534,22 +540,24 @@ static bool ggml_imax_graph_compute(
                         const unsigned int r2 = ne12/ne02;
                         const unsigned int r3 = ne13/ne03;
 
+                        struct imax_kernel_pipeline* pipeline = NULL;
                         // MM kernels on IMAX
                         // TODO: extend the matrix fit to the kernel size
                         if (!ggml_is_transposed(src0) &&
                             !ggml_is_transposed(src1) &&
                             src1t == GGML_TYPE_F32) {
 
-                            struct imax_kernel_pipeline* pipeline = NULL;
+                            pipeline = (struct imax_kernel_pipeline*) malloc(sizeof(struct imax_kernel_pipeline));
+                            pipeline->nlane = nlane;
 
                             switch (src0->type) {
-                                case GGML_TYPE_F32:     pipeline = ctx->kernels[GGML_IMAX_KERNEL_TYPE_MUL_MM_F32_F32    ]; break;
-                                case GGML_TYPE_F16:     pipeline = ctx->kernels[GGML_IMAX_KERNEL_TYPE_MUL_MM_F16_F32    ]; break;
-                                case GGML_TYPE_Q4_0:    pipeline = ctx->kernels[GGML_IMAX_KERNEL_TYPE_MUL_MM_Q4_0_F32   ]; break;
-                                case GGML_TYPE_Q4_1:    pipeline = ctx->kernels[GGML_IMAX_KERNEL_TYPE_MUL_MM_Q4_1_F32   ]; break;
-                                case GGML_TYPE_Q5_0:    pipeline = ctx->kernels[GGML_IMAX_KERNEL_TYPE_MUL_MM_Q5_0_F32   ]; break;
-                                case GGML_TYPE_Q5_1:    pipeline = ctx->kernels[GGML_IMAX_KERNEL_TYPE_MUL_MM_Q5_1_F32   ]; break;
-                                case GGML_TYPE_Q8_0:    pipeline = ctx->kernels[GGML_IMAX_KERNEL_TYPE_MUL_MM_Q8_0_F32   ]; break;
+                                case GGML_TYPE_F32:     pipeline->kernel = ctx->kernels[GGML_IMAX_KERNEL_TYPE_MUL_MM_F32_F32    ]; break;
+                                case GGML_TYPE_F16:     pipeline->kernel = ctx->kernels[GGML_IMAX_KERNEL_TYPE_MUL_MM_F16_F32    ]; break;
+                                case GGML_TYPE_Q4_0:    pipeline->kernel = ctx->kernels[GGML_IMAX_KERNEL_TYPE_MUL_MM_Q4_0_F32   ]; break;
+                                case GGML_TYPE_Q4_1:    pipeline->kernel = ctx->kernels[GGML_IMAX_KERNEL_TYPE_MUL_MM_Q4_1_F32   ]; break;
+                                case GGML_TYPE_Q5_0:    pipeline->kernel = ctx->kernels[GGML_IMAX_KERNEL_TYPE_MUL_MM_Q5_0_F32   ]; break;
+                                case GGML_TYPE_Q5_1:    pipeline->kernel = ctx->kernels[GGML_IMAX_KERNEL_TYPE_MUL_MM_Q5_1_F32   ]; break;
+                                case GGML_TYPE_Q8_0:    pipeline->kernel = ctx->kernels[GGML_IMAX_KERNEL_TYPE_MUL_MM_Q8_0_F32   ]; break;
                                 // TODO: Implement the following operations
                                 //case GGML_TYPE_Q2_K:    pipeline = ctx->kernels[GGML_IMAX_KERNEL_TYPE_MUL_MM_Q2_K_F32   ]; break;
                                 //case GGML_TYPE_Q3_K:    pipeline = ctx->kernels[GGML_IMAX_KERNEL_TYPE_MUL_MM_Q3_K_F32   ]; break;
@@ -579,7 +587,9 @@ static bool ggml_imax_graph_compute(
 
                         const bool inplace = (bool) ((int32_t*) dst->op_params)[4];
 
-                        struct imax_kernel_pipeline* pipeline = ctx->kernels[GGML_IMAX_KERNEL_TYPE_ADD];
+                        struct imax_kernel_pipeline* pipeline = (struct imax_kernel_pipeline*) malloc(sizeof(struct imax_kernel_pipeline));
+                        pipeline->nlane = nlane;
+                        pipeline->kernel = ctx->kernels[GGML_IMAX_KERNEL_TYPE_ADD];
                         set_src01_dst(pipeline->args);
                         ggml_imax_kernel_queue_push(&(ctx->queue), pipeline);
                     } break;
@@ -591,9 +601,9 @@ static bool ggml_imax_graph_compute(
 
                         int64_t n = ggml_nelements(dst);
 
-                        struct imax_kernel_pipeline* pipeline = NULL;
-
-                        pipeline = ctx->kernels[GGML_IMAX_KERNEL_TYPE_SCALE];
+                        struct imax_kernel_pipeline* pipeline = (struct imax_kernel_pipeline*) malloc(sizeof(struct imax_kernel_pipeline));
+                        pipeline->nlane = nlane;
+                        pipeline->kernel = ctx->kernels[GGML_IMAX_KERNEL_TYPE_SCALE];
                         set_src01_dst(pipeline->args);
                         ggml_imax_kernel_queue_push(&(ctx->queue), pipeline);
                     } break;
@@ -601,7 +611,9 @@ static bool ggml_imax_graph_compute(
                     {
                         GGML_ASSERT(src0->nb[0] == ggml_type_size(src0->type));
 
-                        struct imax_kernel_pipeline* pipeline = ctx->kernels[GGML_IMAX_KERNEL_TYPE_SUM_ROWS];
+                        struct imax_kernel_pipeline* pipeline = (struct imax_kernel_pipeline*) malloc(sizeof(struct imax_kernel_pipeline));
+                        pipeline->nlane = nlane;
+                        pipeline->kernel = ctx->kernels[GGML_IMAX_KERNEL_TYPE_SUM_ROWS];
                         set_src01_dst(pipeline->args);
                         ggml_imax_kernel_queue_push(&(ctx->queue), pipeline);
                     } break;
@@ -611,7 +623,9 @@ static bool ggml_imax_graph_compute(
 
                         const int sf = dst->op_params[0];
 
-                        struct imax_kernel_pipeline* pipeline = ctx->kernels[GGML_IMAX_KERNEL_TYPE_UPSCALE_F32];
+                        struct imax_kernel_pipeline* pipeline = (struct imax_kernel_pipeline*) malloc(sizeof(struct imax_kernel_pipeline));
+                        pipeline->nlane = nlane;
+                        pipeline->kernel = ctx->kernels[GGML_IMAX_KERNEL_TYPE_UPSCALE_F32];
                         set_src01_dst(pipeline->args);
                         ggml_imax_kernel_queue_push(&(ctx->queue), pipeline);
                     } break;
@@ -619,7 +633,9 @@ static bool ggml_imax_graph_compute(
                     {
                         GGML_ASSERT(src0->type == GGML_TYPE_F32);
 
-                        struct imax_kernel_pipeline* pipeline = ctx->kernels[GGML_IMAX_KERNEL_TYPE_PAD_F32];
+                        struct imax_kernel_pipeline* pipeline = (struct imax_kernel_pipeline*) malloc(sizeof(struct imax_kernel_pipeline));
+                        pipeline->nlane = nlane;
+                        pipeline->kernel = ctx->kernels[GGML_IMAX_KERNEL_TYPE_PAD_F32];
                         set_src01_dst(pipeline->args);
                         ggml_imax_kernel_queue_push(&(ctx->queue), pipeline);
                     } break;
@@ -632,11 +648,12 @@ static bool ggml_imax_graph_compute(
 
                         enum ggml_sort_order order = (enum ggml_sort_order) dst->op_params[0];
 
-                        struct imax_kernel_pipeline* pipeline = NULL;
+                        struct imax_kernel_pipeline* pipeline = (struct imax_kernel_pipeline*) malloc(sizeof(struct imax_kernel_pipeline));
+                        pipeline->nlane = nlane;
 
                         switch (order) {
-                            case GGML_SORT_ORDER_ASC:  pipeline = ctx->kernels[GGML_IMAX_KERNEL_TYPE_ARGSORT_F32_I32_ASC];  break;
-                            case GGML_SORT_ORDER_DESC: pipeline = ctx->kernels[GGML_IMAX_KERNEL_TYPE_ARGSORT_F32_I32_DESC]; break;
+                            case GGML_SORT_ORDER_ASC:  pipeline->kernel = ctx->kernels[GGML_IMAX_KERNEL_TYPE_ARGSORT_F32_I32_ASC];  break;
+                            case GGML_SORT_ORDER_DESC: pipeline->kernel = ctx->kernels[GGML_IMAX_KERNEL_TYPE_ARGSORT_F32_I32_DESC]; break;
                             default: GGML_ASSERT(false);
                         };
                         set_src01_dst(pipeline->args);
@@ -650,7 +667,9 @@ static bool ggml_imax_graph_compute(
 
                         const size_t offs = 0;
 
-                        struct imax_kernel_pipeline* pipeline = ctx->kernels[GGML_IMAX_KERNEL_TYPE_DIV];
+                        struct imax_kernel_pipeline* pipeline = (struct imax_kernel_pipeline*) malloc(sizeof(struct imax_kernel_pipeline));
+                        pipeline->nlane = nlane;
+                        pipeline->kernel = ctx->kernels[GGML_IMAX_KERNEL_TYPE_DIV];
                         set_src01_dst(pipeline->args);
                         ggml_imax_kernel_queue_push(&(ctx->queue), pipeline);
                     } break;
@@ -661,7 +680,9 @@ static bool ggml_imax_graph_compute(
 
                         const size_t offs = 0;
 
-                        struct imax_kernel_pipeline* pipeline = ctx->kernels[GGML_IMAX_KERNEL_TYPE_SQR];
+                        struct imax_kernel_pipeline* pipeline = (struct imax_kernel_pipeline*) malloc(sizeof(struct imax_kernel_pipeline));
+                        pipeline->nlane = nlane;
+                        pipeline->kernel = ctx->kernels[GGML_IMAX_KERNEL_TYPE_SQR];
                         set_src01_dst(pipeline->args);
                         ggml_imax_kernel_queue_push(&(ctx->queue), pipeline);
                     } break;
@@ -672,7 +693,9 @@ static bool ggml_imax_graph_compute(
 
                         const size_t offs = 0;
 
-                        struct imax_kernel_pipeline* pipeline = ctx->kernels[GGML_IMAX_KERNEL_TYPE_SOFTMAX];
+                        struct imax_kernel_pipeline* pipeline = (struct imax_kernel_pipeline*) malloc(sizeof(struct imax_kernel_pipeline));
+                        pipeline->nlane = nlane;
+                        pipeline->kernel = ctx->kernels[GGML_IMAX_KERNEL_TYPE_SOFTMAX];
                         set_src01_dst(pipeline->args);
                         ggml_imax_kernel_queue_push(&(ctx->queue), pipeline);
                     } break;
@@ -683,7 +706,9 @@ static bool ggml_imax_graph_compute(
 
                         const size_t offs = 0;
 
-                        struct imax_kernel_pipeline* pipeline = ctx->kernels[GGML_IMAX_KERNEL_TYPE_RMS_NORM];
+                        struct imax_kernel_pipeline* pipeline = (struct imax_kernel_pipeline*) malloc(sizeof(struct imax_kernel_pipeline));
+                        pipeline->nlane = nlane;
+                        pipeline->kernel = ctx->kernels[GGML_IMAX_KERNEL_TYPE_RMS_NORM];
                         set_src01_dst(pipeline->args);
                         ggml_imax_kernel_queue_push(&(ctx->queue), pipeline);
                     } break;
@@ -694,7 +719,9 @@ static bool ggml_imax_graph_compute(
 
                         const size_t offs = 0;
 
-                        struct imax_kernel_pipeline* pipeline = ctx->kernels[GGML_IMAX_KERNEL_TYPE_NORM];
+                        struct imax_kernel_pipeline* pipeline = (struct imax_kernel_pipeline*) malloc(sizeof(struct imax_kernel_pipeline));
+                        pipeline->nlane = nlane;
+                        pipeline->kernel = ctx->kernels[GGML_IMAX_KERNEL_TYPE_NORM];
                         set_src01_dst(pipeline->args);
                         ggml_imax_kernel_queue_push(&(ctx->queue), pipeline);
                     } break;
@@ -705,7 +732,9 @@ static bool ggml_imax_graph_compute(
 
                         const size_t offs = 0;
 
-                        struct imax_kernel_pipeline* pipeline = ctx->kernels[GGML_IMAX_KERNEL_TYPE_GROUP_NORM];
+                        struct imax_kernel_pipeline* pipeline = (struct imax_kernel_pipeline*) malloc(sizeof(struct imax_kernel_pipeline));
+                        pipeline->nlane = nlane;
+                        pipeline->kernel = ctx->kernels[GGML_IMAX_KERNEL_TYPE_GROUP_NORM];
                         set_src01_dst(pipeline->args);
                         ggml_imax_kernel_queue_push(&(ctx->queue), pipeline);
                     } break;
@@ -713,7 +742,9 @@ static bool ggml_imax_graph_compute(
                     {
                         const size_t offs = 0;
 
-                        struct imax_kernel_pipeline* pipeline = ctx->kernels[GGML_IMAX_KERNEL_TYPE_GET_ROWS];
+                        struct imax_kernel_pipeline* pipeline = (struct imax_kernel_pipeline*) malloc(sizeof(struct imax_kernel_pipeline));
+                        pipeline->nlane = nlane;
+                        pipeline->kernel = ctx->kernels[GGML_IMAX_KERNEL_TYPE_GET_ROWS];
                         set_src01_dst(pipeline->args);
                         ggml_imax_kernel_queue_push(&(ctx->queue), pipeline);
                     } break;
@@ -721,7 +752,9 @@ static bool ggml_imax_graph_compute(
                     {
                         const size_t offs = 0;
 
-                        struct imax_kernel_pipeline* pipeline = ctx->kernels[GGML_IMAX_KERNEL_TYPE_ALIBI];
+                        struct imax_kernel_pipeline* pipeline = (struct imax_kernel_pipeline*) malloc(sizeof(struct imax_kernel_pipeline));
+                        pipeline->nlane = nlane;
+                        pipeline->kernel = ctx->kernels[GGML_IMAX_KERNEL_TYPE_ALIBI];
                         set_src01_dst(pipeline->args);
                         ggml_imax_kernel_queue_push(&(ctx->queue), pipeline);
                     } break;
@@ -729,7 +762,9 @@ static bool ggml_imax_graph_compute(
                     {
                         const size_t offs = 0;
 
-                        struct imax_kernel_pipeline* pipeline = ctx->kernels[GGML_IMAX_KERNEL_TYPE_ROPE];
+                        struct imax_kernel_pipeline* pipeline = (struct imax_kernel_pipeline*) malloc(sizeof(struct imax_kernel_pipeline));
+                        pipeline->nlane = nlane;
+                        pipeline->kernel = ctx->kernels[GGML_IMAX_KERNEL_TYPE_ROPE];
                         set_src01_dst(pipeline->args);
                         ggml_imax_kernel_queue_push(&(ctx->queue), pipeline);
                     } break;
@@ -737,7 +772,9 @@ static bool ggml_imax_graph_compute(
                     {
                         const size_t offs = 0;
 
-                        struct imax_kernel_pipeline* pipeline = ctx->kernels[GGML_IMAX_KERNEL_TYPE_IM2COL];
+                        struct imax_kernel_pipeline* pipeline = (struct imax_kernel_pipeline*) malloc(sizeof(struct imax_kernel_pipeline));
+                        pipeline->nlane = nlane;
+                        pipeline->kernel = ctx->kernels[GGML_IMAX_KERNEL_TYPE_IM2COL];
                         set_src01_dst(pipeline->args);
                         ggml_imax_kernel_queue_push(&(ctx->queue), pipeline);
                     } break;
@@ -745,7 +782,9 @@ static bool ggml_imax_graph_compute(
                     {
                         const size_t offs = 0;
 
-                        struct imax_kernel_pipeline* pipeline = ctx->kernels[GGML_IMAX_KERNEL_TYPE_POOL_1D];
+                        struct imax_kernel_pipeline* pipeline = (struct imax_kernel_pipeline*) malloc(sizeof(struct imax_kernel_pipeline));
+                        pipeline->nlane = nlane;
+                        pipeline->kernel = ctx->kernels[GGML_IMAX_KERNEL_TYPE_POOL_1D];
                         set_src01_dst(pipeline->args);
                         ggml_imax_kernel_queue_push(&(ctx->queue), pipeline);
                     } break;
@@ -753,7 +792,9 @@ static bool ggml_imax_graph_compute(
                     {
                         const size_t offs = 0;
 
-                        struct imax_kernel_pipeline* pipeline = ctx->kernels[GGML_IMAX_KERNEL_TYPE_POOL_2D];
+                        struct imax_kernel_pipeline* pipeline = (struct imax_kernel_pipeline*) malloc(sizeof(struct imax_kernel_pipeline));
+                        pipeline->nlane = nlane;
+                        pipeline->kernel = ctx->kernels[GGML_IMAX_KERNEL_TYPE_POOL_2D];
                         set_src01_dst(pipeline->args);
                         ggml_imax_kernel_queue_push(&(ctx->queue), pipeline);
                     } break;
@@ -761,7 +802,9 @@ static bool ggml_imax_graph_compute(
                     {
                         const size_t offs = 0;
 
-                        struct imax_kernel_pipeline* pipeline = ctx->kernels[GGML_IMAX_KERNEL_TYPE_LEAKY_RELU];
+                        struct imax_kernel_pipeline* pipeline = (struct imax_kernel_pipeline*) malloc(sizeof(struct imax_kernel_pipeline));
+                        pipeline->nlane = nlane;
+                        pipeline->kernel = ctx->kernels[GGML_IMAX_KERNEL_TYPE_LEAKY_RELU];
                         set_src01_dst(pipeline->args);
                         ggml_imax_kernel_queue_push(&(ctx->queue), pipeline);
                     } break;
@@ -769,7 +812,9 @@ static bool ggml_imax_graph_compute(
                     {
                         const size_t offs = 0;
 
-                        struct imax_kernel_pipeline* pipeline = ctx->kernels[GGML_IMAX_KERNEL_TYPE_CPY];
+                        struct imax_kernel_pipeline* pipeline = (struct imax_kernel_pipeline*) malloc(sizeof(struct imax_kernel_pipeline));
+                        pipeline->nlane = nlane;
+                        pipeline->kernel = ctx->kernels[GGML_IMAX_KERNEL_TYPE_CPY];
                         set_src01_dst(pipeline->args);
                         ggml_imax_kernel_queue_push(&(ctx->queue), pipeline);
                     } break;
@@ -777,7 +822,9 @@ static bool ggml_imax_graph_compute(
                     {
                         const size_t offs = 0;
 
-                        struct imax_kernel_pipeline* pipeline = ctx->kernels[GGML_IMAX_KERNEL_TYPE_DUP];
+                        struct imax_kernel_pipeline* pipeline = (struct imax_kernel_pipeline*) malloc(sizeof(struct imax_kernel_pipeline));
+                        pipeline->nlane = nlane;
+                        pipeline->kernel = ctx->kernels[GGML_IMAX_KERNEL_TYPE_DUP];
                         set_src01_dst(pipeline->args);
                         ggml_imax_kernel_queue_push(&(ctx->queue), pipeline);
                     } break;
@@ -785,7 +832,9 @@ static bool ggml_imax_graph_compute(
                     {
                         const size_t offs = 0;
 
-                        struct imax_kernel_pipeline* pipeline = ctx->kernels[GGML_IMAX_KERNEL_TYPE_CONT];
+                        struct imax_kernel_pipeline* pipeline = (struct imax_kernel_pipeline*) malloc(sizeof(struct imax_kernel_pipeline));
+                        pipeline->kernel = ctx->kernels[GGML_IMAX_KERNEL_TYPE_CONT];
+                        pipeline->nlane = nlane;
                         set_src01_dst(pipeline->args);
                         ggml_imax_kernel_queue_push(&(ctx->queue), pipeline);
                     } break;
@@ -793,7 +842,9 @@ static bool ggml_imax_graph_compute(
                     {
                         const size_t offs = 0;
 
-                        struct imax_kernel_pipeline* pipeline = ctx->kernels[GGML_IMAX_KERNEL_TYPE_DIAG_MASK_INF];
+                        struct imax_kernel_pipeline* pipeline = (struct imax_kernel_pipeline*) malloc(sizeof(struct imax_kernel_pipeline));
+                        pipeline->kernel = ctx->kernels[GGML_IMAX_KERNEL_TYPE_DIAG_MASK_INF];
+                        pipeline->nlane = nlane;
                         set_src01_dst(pipeline->args);
                         ggml_imax_kernel_queue_push(&(ctx->queue), pipeline);
                     } break;
@@ -801,7 +852,9 @@ static bool ggml_imax_graph_compute(
                     {
                         const size_t offs = 0;
 
-                        struct imax_kernel_pipeline* pipeline = ctx->kernels[GGML_IMAX_KERNEL_TYPE_UNARY];
+                        struct imax_kernel_pipeline* pipeline = (struct imax_kernel_pipeline*) malloc(sizeof(struct imax_kernel_pipeline));
+                        pipeline->kernel = ctx->kernels[GGML_IMAX_KERNEL_TYPE_UNARY];
+                        pipeline->nlane = nlane;
                         set_src01_dst(pipeline->args);
                         ggml_imax_kernel_queue_push(&(ctx->queue), pipeline);
                     } break;
@@ -839,29 +892,20 @@ GGML_CALL static const char * ggml_backend_imax_buffer_get_name(ggml_backend_buf
 
 GGML_CALL static void ggml_backend_imax_buffer_free_buffer(ggml_backend_buffer_t buffer) {
     struct ggml_backend_imax_buffer_context* ctx = (struct ggml_backend_imax_buffer_context*)buffer->context;
-
-    for (int i = 0; i < ctx->n_buffers; i++) {
-        free(ctx->buffers[i].data);
-    }
-
-    if (ctx->owned) {
-        free(ctx->all_data);
-    }
-
     free(ctx);
 }
 
 GGML_CALL static void * ggml_backend_imax_buffer_get_base(ggml_backend_buffer_t buffer) {
     struct ggml_backend_imax_buffer_context* ctx = (struct ggml_backend_imax_buffer_context*)buffer->context;
 
-    return ctx->all_data;
+    return ctx->data;
 }
 
 GGML_CALL static void ggml_backend_imax_buffer_set_tensor(ggml_backend_buffer_t buffer, struct ggml_tensor* tensor, const void* data, size_t offset, size_t size) {
     //GGML_IMAX_LOG_INFO("%s: tensor '%s', offset = %zu, size = %zu\n", __func__, tensor->name, offset, size);
     struct ggml_backend_imax_buffer_context* ctx = (struct ggml_backend_imax_buffer_context*)buffer->context;
 
-    memcpy(&((char*)(ctx->buffers[0].data))[offset], data, size);
+    memcpy(&((char*)(ctx->data))[offset], data, size);
     // TODO: Below is not working (Bus Error)
     //if (size % DMA_MMAP_SIZE != 0) {
         //memset(&((char*)(ctx->buffers[0].data))[offset + size], 0, DMA_MMAP_SIZE - (size % DMA_MMAP_SIZE));
@@ -874,7 +918,7 @@ GGML_CALL static void ggml_backend_imax_buffer_get_tensor(ggml_backend_buffer_t 
     GGML_IMAX_LOG_INFO("%s: tensor '%s', offset = %zu, size = %zu\n", __func__, tensor->name, offset, size);
     struct ggml_backend_imax_buffer_context* ctx = (struct ggml_backend_imax_buffer_context*)buffer->context;
 
-    memcpy(data, &((char*)(&ctx->buffers[0].data))[offset], size);
+    memcpy(data, &((char*)(&ctx->data))[offset], size);
 
     UNUSED(buffer);
 }
@@ -894,7 +938,7 @@ GGML_CALL static bool ggml_backend_imax_buffer_cpy_tensor(ggml_backend_buffer_t 
 GGML_CALL static void ggml_backend_imax_buffer_clear(ggml_backend_buffer_t buffer, uint8_t value) {
     struct ggml_backend_imax_buffer_context* ctx = (struct ggml_backend_imax_buffer_contexts *)buffer->context;
 
-    memset(ctx->all_data, value, ctx->all_size);
+    memset(ctx->data, value, ctx->size);
 }
 
 static struct ggml_backend_buffer_i ggml_backend_imax_buffer_i = {
@@ -923,8 +967,7 @@ GGML_CALL static size_t ggml_backend_imax_buffer_type_get_alignment(ggml_backend
 }
 
 GGML_CALL static ggml_backend_buffer_t ggml_backend_imax_buffer_type_alloc_buffer(ggml_backend_buffer_type_t buft, size_t size) {
-    GGML_IMAX_LOG_INFO("%s: size = %8.2f MiB %d\n", __func__, size / 1024.0 / 1024.0, block_ptr);
-
+    //GGML_IMAX_LOG_INFO("%s: size = %8.2f MiB %d\n", __func__, size / 1024.0 / 1024.0, block_ptr);
     struct ggml_backend_imax_buffer_context* ctx = malloc(sizeof(struct ggml_backend_imax_buffer_context));
 
     const size_t size_page = DMA_MMAP_SIZE;
@@ -936,17 +979,10 @@ GGML_CALL static ggml_backend_buffer_t ggml_backend_imax_buffer_type_alloc_buffe
 
     struct emax7* device = ggml_backend_imax_get_device();
 
-    // TODO: ggml_imax_host_malloc() 直す
-    ctx->all_data = ggml_imax_host_malloc(size_aligned);
-    ctx->all_size = size_aligned;
-    ctx->owned = true;
-    ctx->n_buffers = 1;
+    ctx->data = ggml_imax_host_malloc(size_aligned);
+    ctx->size = size_aligned;
 
-    ctx->buffers[0].data = ctx->all_data;
-    ctx->buffers[0].size = ctx->all_size;
-
-    GGML_IMAX_LOG_INFO("%s: allocated buffer, size = %8.2f MiB\n", __func__, size_aligned / 1024.0 / 1024.0);
-
+    //GGML_IMAX_LOG_INFO("%s: allocated buffer, size = %8.2f MiB\n", __func__, size_aligned / 1024.0 / 1024.0);
     return ggml_backend_buffer_init(buft, ggml_backend_imax_buffer_i, ctx, size);
 }
 
@@ -1046,8 +1082,7 @@ static ggml_guid_t ggml_backend_imax_guid(void) {
 }
 
 ggml_backend_t ggml_backend_imax_init(void) {
-    //struct ggml_imax_context* ctx = ggml_imax_init(GGML_DEFAULT_N_THREADS);
-    struct ggml_imax_context* ctx = ggml_imax_init(1);
+    struct ggml_imax_context* ctx = ggml_imax_init(GGML_DEFAULT_N_THREADS);
 
     if (ctx == NULL) {
         return NULL;
@@ -1068,12 +1103,12 @@ bool ggml_backend_is_imax(ggml_backend_t backend) {
     return backend != NULL && ggml_guid_matches(backend->guid, ggml_backend_imax_guid());
 }
 
-void ggml_backend_imax_set_n_cb(ggml_backend_t backend, int n_cb) {
+void ggml_backend_imax_set_nlane(ggml_backend_t backend, int nlane) {
     GGML_ASSERT(ggml_backend_is_imax(backend));
 
     struct ggml_imax_context* ctx = (struct ggml_imax_context*)backend->context;
 
-    ctx->n_cb = MIN(n_cb, GGML_IMAX_MAX_BUFFERS);
+    ctx->nlane = MIN(nlane, GGML_IMAX_MAX_BUFFERS);
 }
 
 GGML_CALL ggml_backend_t ggml_backend_reg_imax_init(const char* params, void* user_data); // silence warning

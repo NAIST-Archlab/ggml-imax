@@ -47,7 +47,7 @@
 #define QK 32
 
 void* kernel_add(struct imax_kernel_args* args) {
-    GGML_IMAX_KERNEL_LOG_DEBUG("%s", __func__);
+    GGML_IMAX_KERNEL_LOG_DEBUG("name: %s, lane: %d", __func__, args->lane);
     load_src01_dst(args);
 
     for (int i3 = 0; i3 < ne03; i3++) {
@@ -67,7 +67,7 @@ void* kernel_add(struct imax_kernel_args* args) {
 }
 
 void* kernel_mul(struct imax_kernel_args* args) {
-    GGML_IMAX_KERNEL_LOG_DEBUG("%s", __func__);
+    GGML_IMAX_KERNEL_LOG_DEBUG("name: %s, lane: %d", __func__, args->lane);
     load_src01_dst(args);
 
     for (int i3 = 0; i3 < ne03; i3++) {
@@ -87,7 +87,7 @@ void* kernel_mul(struct imax_kernel_args* args) {
 }
 
 void* kernel_mul_mm_f32_f32(struct imax_kernel_args* args) {
-    GGML_IMAX_KERNEL_LOG_DEBUG("%s", __func__);
+    GGML_IMAX_KERNEL_LOG_DEBUG("name: %s, lane: %d", __func__, args->lane);
     load_src01_dst(args);
 
     for (int i3 = 0; i3 < ne03; i3++) {
@@ -110,7 +110,7 @@ void* kernel_mul_mm_f32_f32(struct imax_kernel_args* args) {
 
 // Under construction (not working)
 void* kernel_mul_mm_f16_f32(struct imax_kernel_args* args) {
-    GGML_IMAX_KERNEL_LOG_DEBUG("%s", __func__);
+    GGML_IMAX_KERNEL_LOG_DEBUG("name: %s, lane: %d", __func__, args->lane);
     load_src01_dst(args);
 
     for (int i3 = 0; i3 < ne03; i3++) {
@@ -128,11 +128,12 @@ void* kernel_mul_mm_f16_f32(struct imax_kernel_args* args) {
         }
     }
 
+    //*(args->stat) 
     return NULL;
 }
 
 void *kernel_mul_mm_q4_0_f32(struct imax_kernel_args *args) {
-    GGML_IMAX_KERNEL_LOG_DEBUG("%s", __func__);
+    GGML_IMAX_KERNEL_LOG_DEBUG("name: %s, lane: %d", __func__, args->lane);
     load_src01_dst(args);
 
     const int ne = ne0 * ne1 * ne2 * ne3;
@@ -374,7 +375,7 @@ void *kernel_mul_mm_q4_0_f32(struct imax_kernel_args *args) {
 }
 
 void* kernel_mul_mm_q4_1_f32(struct imax_kernel_args* args) {
-    GGML_IMAX_KERNEL_LOG_DEBUG("%s", __func__);
+    GGML_IMAX_KERNEL_LOG_DEBUG("name: %s, lane: %d", __func__, args->lane);
     load_src01_dst(args);
 
     for (int i3 = 0; i3 < ne03; i3++) {
@@ -396,7 +397,7 @@ void* kernel_mul_mm_q4_1_f32(struct imax_kernel_args* args) {
 }
 
 void* kernel_mul_mm_q5_0_f32(struct imax_kernel_args* args) {
-    GGML_IMAX_KERNEL_LOG_DEBUG("%s", __func__);
+    GGML_IMAX_KERNEL_LOG_DEBUG("name: %s, lane: %d", __func__, args->lane);
     load_src01_dst(args);
 
     for (int i3 = 0; i3 < ne03; i3++) {
@@ -418,7 +419,7 @@ void* kernel_mul_mm_q5_0_f32(struct imax_kernel_args* args) {
 }
 
 void* kernel_mul_mm_q5_1_f32(struct imax_kernel_args* args) {
-    GGML_IMAX_KERNEL_LOG_DEBUG("%s", __func__);
+    GGML_IMAX_KERNEL_LOG_DEBUG("name: %s, lane: %d", __func__, args->lane);
     load_src01_dst(args);
 
     for (int i3 = 0; i3 < ne03; i3++) {
@@ -440,7 +441,7 @@ void* kernel_mul_mm_q5_1_f32(struct imax_kernel_args* args) {
 }
 
 void* kernel_mul_mm_q8_0_f32(struct imax_kernel_args* args) {
-    GGML_IMAX_KERNEL_LOG_DEBUG("%s", __func__);
+    GGML_IMAX_KERNEL_LOG_DEBUG("name: %s, lane: %d", __func__, args->lane);
     load_src01_dst(args);
 
     for (int i3 = 0; i3 < ne03; i3++) {
@@ -462,7 +463,7 @@ void* kernel_mul_mm_q8_0_f32(struct imax_kernel_args* args) {
 }
 
 void* kernel_mul_mm_q2_K_f32(struct imax_kernel_args* args) {
-    GGML_IMAX_KERNEL_LOG_DEBUG("%s", __func__);
+    GGML_IMAX_KERNEL_LOG_DEBUG("name: %s, lane: %d", __func__, args->lane);
     load_src01_dst(args);
 
     for (int i3 = 0; i3 < ne03; i3++) {
@@ -484,7 +485,7 @@ void* kernel_mul_mm_q2_K_f32(struct imax_kernel_args* args) {
 }
 
 void* kernel_mul_mm_q3_K_f32(struct imax_kernel_args* args) {
-    GGML_IMAX_KERNEL_LOG_DEBUG("%s", __func__);
+    GGML_IMAX_KERNEL_LOG_DEBUG("name: %s, lane: %d", __func__, args->lane);
     load_src01_dst(args);
 
     for (int i3 = 0; i3 < ne03; i3++) {
@@ -506,7 +507,7 @@ void* kernel_mul_mm_q3_K_f32(struct imax_kernel_args* args) {
 }
 
 void* kernel_mul_mm_q4_K_f32(struct imax_kernel_args* args) {
-    GGML_IMAX_KERNEL_LOG_DEBUG("%s", __func__);
+    GGML_IMAX_KERNEL_LOG_DEBUG("name: %s, lane: %d", __func__, args->lane);
     load_src01_dst(args);
 
     for (int i3 = 0; i3 < ne03; i3++) {
@@ -528,7 +529,7 @@ void* kernel_mul_mm_q4_K_f32(struct imax_kernel_args* args) {
 }
 
 void* kernel_mul_mm_q5_K_f32(struct imax_kernel_args* args) {
-    GGML_IMAX_KERNEL_LOG_DEBUG("%s", __func__);
+    GGML_IMAX_KERNEL_LOG_DEBUG("name: %s, lane: %d", __func__, args->lane);
     load_src01_dst(args);
 
     for (int i3 = 0; i3 < ne03; i3++) {
@@ -550,7 +551,7 @@ void* kernel_mul_mm_q5_K_f32(struct imax_kernel_args* args) {
 }
 
 void* kernel_mul_mm_q6_K_f32(struct imax_kernel_args* args) {
-    GGML_IMAX_KERNEL_LOG_DEBUG("%s", __func__);
+    GGML_IMAX_KERNEL_LOG_DEBUG("name: %s, lane: %d", __func__, args->lane);
     load_src01_dst(args);
 
     for (int i3 = 0; i3 < ne03; i3++) {

@@ -3,6 +3,7 @@
 #include "ggml-quants.h"
 
 #include <stdio.h>
+#include <signal.h>
 
 static const ggml_type_traits_t type_traits[GGML_TYPE_COUNT] = {
     [GGML_TYPE_I8] = {
@@ -356,7 +357,7 @@ static const ggml_type_traits_t type_traits[GGML_TYPE_COUNT] = {
 
 
 void* kernel_upscale_f32(struct imax_kernel_args* args) {
-    GGML_IMAX_KERNEL_LOG_DEBUG("%s", __func__);
+    GGML_IMAX_KERNEL_LOG_DEBUG("name: %s, lane: %d", __func__, args->lane);
     load_src01_dst(args);
 
     GGML_ASSERT(nb00 == sizeof(float));
@@ -382,7 +383,7 @@ void* kernel_upscale_f32(struct imax_kernel_args* args) {
 }
 
 void* kernel_pad_f32(struct imax_kernel_args* args) {
-    GGML_IMAX_KERNEL_LOG_DEBUG("%s", __func__);
+    GGML_IMAX_KERNEL_LOG_DEBUG("name: %s, lane: %d", __func__, args->lane);
     load_src01_dst(args);
 
     GGML_ASSERT(nb00 == sizeof(float));
@@ -408,7 +409,7 @@ void* kernel_pad_f32(struct imax_kernel_args* args) {
 }
 
 void* kernel_argsort_f32_i32_asc(struct imax_kernel_args* args) {
-    GGML_IMAX_KERNEL_LOG_DEBUG("%s", __func__);
+    GGML_IMAX_KERNEL_LOG_DEBUG("name: %s, lane: %d", __func__, args->lane);
     load_src01_dst(args);
 
     const int64_t nr = ne01*ne02*ne03;
@@ -436,11 +437,10 @@ void* kernel_argsort_f32_i32_asc(struct imax_kernel_args* args) {
     }
     
     return NULL;
-
 }
 
 void* kernel_argsort_f32_i32_desc(struct imax_kernel_args* args) {
-    GGML_IMAX_KERNEL_LOG_DEBUG("%s", __func__);
+    GGML_IMAX_KERNEL_LOG_DEBUG("name: %s, lane: %d", __func__, args->lane);
     load_src01_dst(args);
 
     const int64_t nr = ne01*ne02*ne03;
@@ -466,11 +466,12 @@ void* kernel_argsort_f32_i32_desc(struct imax_kernel_args* args) {
             }
         }
     }
+
     return NULL;
 }
 
 void kernel_sum_rows_f32(struct imax_kernel_args* args) {
-    GGML_IMAX_KERNEL_LOG_DEBUG("%s", __func__);
+    GGML_IMAX_KERNEL_LOG_DEBUG("name: %s, lane: %d", __func__, args->lane);
     load_src01_dst(args);
 
     for (int i3 = 0; i3 < ne03; i3++) {
@@ -489,7 +490,7 @@ void kernel_sum_rows_f32(struct imax_kernel_args* args) {
 }
 
 void* kernel_sum_rows(struct imax_kernel_args* args) {
-    GGML_IMAX_KERNEL_LOG_DEBUG("%s", __func__);
+    GGML_IMAX_KERNEL_LOG_DEBUG("name: %s, lane: %d", __func__, args->lane);
 
     switch (args->src0_type)  {
         case GGML_TYPE_F32: 
@@ -506,7 +507,7 @@ void* kernel_sum_rows(struct imax_kernel_args* args) {
 }
 
 void kernel_scale_f32(struct imax_kernel_args* args) {
-    GGML_IMAX_KERNEL_LOG_DEBUG("%s", __func__);
+    GGML_IMAX_KERNEL_LOG_DEBUG("name: %s, lane: %d", __func__, args->lane);
     load_src01_dst(args);
 
     float v = *(float*)dst_op_params;
@@ -525,7 +526,7 @@ void kernel_scale_f32(struct imax_kernel_args* args) {
 }
 
 void* kernel_scale(struct imax_kernel_args* args) {
-    GGML_IMAX_KERNEL_LOG_DEBUG("%s", __func__);
+    GGML_IMAX_KERNEL_LOG_DEBUG("name: %s, lane: %d", __func__, args->lane);
 
     switch (args->src0_type) {
         case GGML_TYPE_F32:
@@ -542,7 +543,7 @@ void* kernel_scale(struct imax_kernel_args* args) {
 }
 
 void kernel_div_f32(struct imax_kernel_args* args) {
-    GGML_IMAX_KERNEL_LOG_DEBUG("%s", __func__);
+    GGML_IMAX_KERNEL_LOG_DEBUG("name: %s, lane: %d", __func__, args->lane);
     load_src01_dst(args);
 
     for (int i3 = 0; i3 < ne03; i3++) {
@@ -560,7 +561,7 @@ void kernel_div_f32(struct imax_kernel_args* args) {
 }
 
 void* kernel_div(struct imax_kernel_args* args) {
-    GGML_IMAX_KERNEL_LOG_DEBUG("%s", __func__);
+    GGML_IMAX_KERNEL_LOG_DEBUG("name: %s, lane: %d", __func__, args->lane);
 
     switch (args->src0_type) {
         case GGML_TYPE_F32:
@@ -577,7 +578,7 @@ void* kernel_div(struct imax_kernel_args* args) {
 }
 
 void kernel_sqr_f32(struct imax_kernel_args* args) {
-    GGML_IMAX_KERNEL_LOG_DEBUG("%s", __func__);
+    GGML_IMAX_KERNEL_LOG_DEBUG("name: %s, lane: %d", __func__, args->lane);
     load_src01_dst(args);
 
     for (int i3 = 0; i3 < ne03; i3++) {
@@ -594,7 +595,7 @@ void kernel_sqr_f32(struct imax_kernel_args* args) {
 }
 
 void* kernel_sqr(struct imax_kernel_args* args) {
-    GGML_IMAX_KERNEL_LOG_DEBUG("%s", __func__);
+    GGML_IMAX_KERNEL_LOG_DEBUG("name: %s, lane: %d", __func__, args->lane);
 
     switch (args->src0_type) {
         case GGML_TYPE_F32:
@@ -612,7 +613,7 @@ void* kernel_sqr(struct imax_kernel_args* args) {
 
 // TODO: Fit IMAX
 void* kernel_softmax(struct imax_kernel_args* args) {
-    GGML_IMAX_KERNEL_LOG_DEBUG("%s", __func__);
+    GGML_IMAX_KERNEL_LOG_DEBUG("name: %s, lane: %d", __func__, args->lane);
     load_src01_dst(args);
 
     float scale    = 1.0f;
@@ -692,7 +693,7 @@ void* kernel_softmax(struct imax_kernel_args* args) {
 }
 
 void kernel_rms_norm_f32(struct imax_kernel_args* args) {
-    GGML_IMAX_KERNEL_LOG_DEBUG("%s", __func__);
+    GGML_IMAX_KERNEL_LOG_DEBUG("name: %s, lane: %d", __func__, args->lane);
     load_src01_dst(args);
 
     GGML_ASSERT(nb00 == sizeof(float));
@@ -729,7 +730,7 @@ void kernel_rms_norm_f32(struct imax_kernel_args* args) {
 }
 
 void* kernel_rms_norm(struct imax_kernel_args* args) {
-    GGML_IMAX_KERNEL_LOG_DEBUG("%s", __func__);
+    GGML_IMAX_KERNEL_LOG_DEBUG("name: %s, lane: %d", __func__, args->lane);
 
     switch (args->src0_type) {
         case GGML_TYPE_F32: {
@@ -744,7 +745,7 @@ void* kernel_rms_norm(struct imax_kernel_args* args) {
 }
 
 void kernel_norm_f32(struct imax_kernel_args* args) {
-    GGML_IMAX_KERNEL_LOG_DEBUG("%s", __func__);
+    GGML_IMAX_KERNEL_LOG_DEBUG("name: %s, lane: %d", __func__, args->lane);
     load_src01_dst(args);
 
     GGML_ASSERT(args->src0_type == GGML_TYPE_F32);
@@ -783,7 +784,7 @@ void kernel_norm_f32(struct imax_kernel_args* args) {
 }
 
 void* kernel_norm(struct imax_kernel_args* args) {
-    GGML_IMAX_KERNEL_LOG_DEBUG("%s", __func__);
+    GGML_IMAX_KERNEL_LOG_DEBUG("name: %s, lane: %d", __func__, args->lane);
 
     switch (args->src0_type) {
         case GGML_TYPE_F32: 
@@ -800,12 +801,12 @@ void* kernel_norm(struct imax_kernel_args* args) {
 }
 
 void* kernel_group_norm(struct imax_kernel_args* args) {
-    GGML_IMAX_KERNEL_LOG_DEBUG("%s", __func__);
+    GGML_IMAX_KERNEL_LOG_DEBUG("name: %s, lane: %d", __func__, args->lane);
     return NULL;
 }
 
 static void kernel_get_rows_q(struct imax_kernel_args* args) {
-    GGML_IMAX_KERNEL_LOG_DEBUG("%s", __func__);
+    GGML_IMAX_KERNEL_LOG_DEBUG("name: %s, lane: %d", __func__, args->lane);
     load_src01_dst(args);
 
     int64_t nc = ne00;
@@ -832,7 +833,7 @@ static void kernel_get_rows_q(struct imax_kernel_args* args) {
 }
 
 static void kernel_get_rows_f16(struct imax_kernel_args* args) {
-    GGML_IMAX_KERNEL_LOG_DEBUG("%s", __func__);
+    GGML_IMAX_KERNEL_LOG_DEBUG("name: %s, lane: %d", __func__, args->lane);
     load_src01_dst(args);
 
     int64_t nc = ne00;
@@ -860,7 +861,7 @@ static void kernel_get_rows_f16(struct imax_kernel_args* args) {
 }
 
 static void kernel_get_rows_f32(struct imax_kernel_args* args) {
-    GGML_IMAX_KERNEL_LOG_DEBUG("%s", __func__);
+    GGML_IMAX_KERNEL_LOG_DEBUG("name: %s, lane: %d", __func__, args->lane);
     load_src01_dst(args);
 
     int64_t nc = ne00;
@@ -888,7 +889,7 @@ static void kernel_get_rows_f32(struct imax_kernel_args* args) {
 }
 
 void* kernel_get_rows(struct imax_kernel_args* args) {
-    GGML_IMAX_KERNEL_LOG_DEBUG("%s", __func__);
+    GGML_IMAX_KERNEL_LOG_DEBUG("name: %s, lane: %d", __func__, args->lane);
 
     switch(args->src0_type) {
         case GGML_TYPE_Q4_0:
@@ -932,7 +933,7 @@ void* kernel_get_rows(struct imax_kernel_args* args) {
 }
 
 void kernel_alibi_f32(struct imax_kernel_args* args) {
-    GGML_IMAX_KERNEL_LOG_DEBUG("%s", __func__);
+    GGML_IMAX_KERNEL_LOG_DEBUG("name: %s, lane: %d", __func__, args->lane);
     load_src01_dst(args);
 
     int n_head = ((int32_t *)dst_op_params)[1];
@@ -969,7 +970,7 @@ void kernel_alibi_f32(struct imax_kernel_args* args) {
 }
 
 void* kernel_alibi(struct imax_kernel_args* args) {
-    GGML_IMAX_KERNEL_LOG_DEBUG("%s", __func__);
+    GGML_IMAX_KERNEL_LOG_DEBUG("name: %s, lane: %d", __func__, args->lane);
 
     switch(args->src0_type) {
         case GGML_TYPE_F32:
@@ -986,36 +987,37 @@ void* kernel_alibi(struct imax_kernel_args* args) {
                 GGML_ASSERT(false);
             } break;
     }
+
     return NULL;
 }
 
 void* kernel_rope(struct imax_kernel_args* args) {
-    GGML_IMAX_KERNEL_LOG_DEBUG("%s", __func__);
+    GGML_IMAX_KERNEL_LOG_DEBUG("name: %s, lane: %d", __func__, args->lane);
     return NULL;
 }
 
 void* kernel_im2col(struct imax_kernel_args* args) {
-    GGML_IMAX_KERNEL_LOG_DEBUG("%s", __func__);
+    GGML_IMAX_KERNEL_LOG_DEBUG("name: %s, lane: %d", __func__, args->lane);
     return NULL;
 }
 
 void* kernel_pool_1d(struct imax_kernel_args* args) {
-    GGML_IMAX_KERNEL_LOG_DEBUG("%s", __func__);
+    GGML_IMAX_KERNEL_LOG_DEBUG("name: %s, lane: %d", __func__, args->lane);
     return NULL;
 }
 
 void* kernel_pool_2d(struct imax_kernel_args* args) {
-    GGML_IMAX_KERNEL_LOG_DEBUG("%s", __func__);
+    GGML_IMAX_KERNEL_LOG_DEBUG("name: %s, lane: %d", __func__, args->lane);
     return NULL;
 }
 
 void* kernel_leaky_relu(struct imax_kernel_args* args) {
-    GGML_IMAX_KERNEL_LOG_DEBUG("%s", __func__);
+    GGML_IMAX_KERNEL_LOG_DEBUG("name: %s, lane: %d", __func__, args->lane);
     return NULL;
 }
 
 void kernel_dup_bytes(struct imax_kernel_args* args) {
-    GGML_IMAX_KERNEL_LOG_DEBUG("%s", __func__);
+    GGML_IMAX_KERNEL_LOG_DEBUG("name: %s, lane: %d", __func__, args->lane);
     load_src01_dst(args);
 
     // at same types
@@ -1042,7 +1044,7 @@ void kernel_dup_bytes(struct imax_kernel_args* args) {
 }
 
 void kernel_dup_f32(struct imax_kernel_args* args) {
-    GGML_IMAX_KERNEL_LOG_DEBUG("%s", __func__);
+    GGML_IMAX_KERNEL_LOG_DEBUG("name: %s, lane: %d", __func__, args->lane);
     load_src01_dst(args);
 
     // at same types
@@ -1068,7 +1070,7 @@ void kernel_dup_f32(struct imax_kernel_args* args) {
 }
 
 void* kernel_dup(struct imax_kernel_args* args) {
-    GGML_IMAX_KERNEL_LOG_DEBUG("%s", __func__);
+    GGML_IMAX_KERNEL_LOG_DEBUG("name: %s, lane: %d", __func__, args->lane);
 
     if (args->src0_type == args->dst_type) {
         kernel_dup_bytes(args);
@@ -1094,28 +1096,28 @@ void* kernel_dup(struct imax_kernel_args* args) {
 }
 
 void* kernel_cpy(struct imax_kernel_args* args) {
-    GGML_IMAX_KERNEL_LOG_DEBUG("%s", __func__);
+    GGML_IMAX_KERNEL_LOG_DEBUG("name: %s, lane: %d", __func__, args->lane);
     kernel_dup(args);
     return NULL;
 }
 
 void* kernel_contiguous(struct imax_kernel_args* args) {
-    GGML_IMAX_KERNEL_LOG_DEBUG("%s", __func__);
+    GGML_IMAX_KERNEL_LOG_DEBUG("name: %s, lane: %d", __func__, args->lane);
     kernel_dup(args);
     return NULL;
 }
 
 void* kernel_transpose(struct imax_kernel_args* args) {
-    GGML_IMAX_KERNEL_LOG_DEBUG("%s", __func__);
+    GGML_IMAX_KERNEL_LOG_DEBUG("name: %s, lane: %d", __func__, args->lane);
     return NULL;
 }
 
 void* kernel_diag_mask_inf(struct imax_kernel_args* args) {
-    GGML_IMAX_KERNEL_LOG_DEBUG("%s", __func__);
+    GGML_IMAX_KERNEL_LOG_DEBUG("name: %s, lane: %d", __func__, args->lane);
     return NULL;
 }
 
 void* kernel_unary(struct imax_kernel_args* args) {
-    GGML_IMAX_KERNEL_LOG_DEBUG("%s", __func__);
+    GGML_IMAX_KERNEL_LOG_DEBUG("name: %s, lane: %d", __func__, args->lane);
     return NULL;
 }
