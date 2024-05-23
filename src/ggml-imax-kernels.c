@@ -38,7 +38,9 @@
     Uint* src0_op_params = args_name->src0_op_params;\
     Uint* src1_op_params = args_name->src1_op_params;\
     Uint* src2_op_params = args_name->src2_op_params;\
-    Uint* dst_op_params  = args_name->dst_op_params;
+    Uint* dst_op_params  = args_name->dst_op_params;\
+    int32_t  nlane = args_name->nlane; \
+    int32_t   lane = args_name->lane
 
 #undef MIN
 #undef MAX
@@ -50,7 +52,7 @@ void* kernel_add(struct imax_kernel_args* args) {
     GGML_IMAX_KERNEL_LOG_DEBUG("name: %s, lane: %d", __func__, args->lane);
     load_src01_dst(args);
 
-    for (int i3 = 0; i3 < ne03; i3++) {
+    for (int64_t i3 = lane*(ne03/nlane); i3 < (lane+1)*(ne03/nlane); i3++) {
         for (int i2 = 0; i2 < ne02; i2++) {
             for (int i1 = 0; i1 < ne01; i1++) {
                 for (int i0 = 0; i0 < ne00; i0++) {
@@ -70,7 +72,7 @@ void* kernel_mul(struct imax_kernel_args* args) {
     GGML_IMAX_KERNEL_LOG_DEBUG("name: %s, lane: %d", __func__, args->lane);
     load_src01_dst(args);
 
-    for (int i3 = 0; i3 < ne03; i3++) {
+    for (int64_t i3 = lane*(ne03/nlane); i3 < (lane+1)*(ne03/nlane); i3++) {
         for (int i2 = 0; i2 < ne02; i2++) {
             for (int i1 = 0; i1 < ne01; i1++) {
                 for (int i0 = 0; i0 < ne00; i0++) {
@@ -90,7 +92,7 @@ void* kernel_mul_mm_f32_f32(struct imax_kernel_args* args) {
     GGML_IMAX_KERNEL_LOG_DEBUG("name: %s, lane: %d", __func__, args->lane);
     load_src01_dst(args);
 
-    for (int i3 = 0; i3 < ne03; i3++) {
+    for (int64_t i3 = lane*(ne03/nlane); i3 < (lane+1)*(ne03/nlane); i3++) {
         for (int i2 = 0; i2 < ne02; i2++) {
             for (int i00 = 0; i00 < ne00; i00++) {
                 for (int i01 = 0; i01 < ne01; i01++) {
@@ -113,7 +115,7 @@ void* kernel_mul_mm_f16_f32(struct imax_kernel_args* args) {
     GGML_IMAX_KERNEL_LOG_DEBUG("name: %s, lane: %d", __func__, args->lane);
     load_src01_dst(args);
 
-    for (int i3 = 0; i3 < ne03; i3++) {
+    for (int64_t i3 = lane*(ne03/nlane); i3 < (lane+1)*(ne03/nlane); i3++) {
         for (int i2 = 0; i2 < ne02; i2++) {
             for (int i00 = 0; i00 < ne00; i00++) {
                 for (int i01 = 0; i01 < ne01; i01++) {
@@ -378,7 +380,7 @@ void* kernel_mul_mm_q4_1_f32(struct imax_kernel_args* args) {
     GGML_IMAX_KERNEL_LOG_DEBUG("name: %s, lane: %d", __func__, args->lane);
     load_src01_dst(args);
 
-    for (int i3 = 0; i3 < ne03; i3++) {
+    for (int64_t i3 = lane*(ne03/nlane); i3 < (lane+1)*(ne03/nlane); i3++) {
         for (int i2 = 0; i2 < ne02; i2++) {
             for (int i00 = 0; i00 < ne00; i00++) {
                 for (int i01 = 0; i01 < ne01; i01++) {
@@ -400,7 +402,7 @@ void* kernel_mul_mm_q5_0_f32(struct imax_kernel_args* args) {
     GGML_IMAX_KERNEL_LOG_DEBUG("name: %s, lane: %d", __func__, args->lane);
     load_src01_dst(args);
 
-    for (int i3 = 0; i3 < ne03; i3++) {
+    for (int64_t i3 = lane*(ne03/nlane); i3 < (lane+1)*(ne03/nlane); i3++) {
         for (int i2 = 0; i2 < ne02; i2++) {
             for (int i00 = 0; i00 < ne00; i00++) {
                 for (int i01 = 0; i01 < ne01; i01++) {
@@ -422,7 +424,7 @@ void* kernel_mul_mm_q5_1_f32(struct imax_kernel_args* args) {
     GGML_IMAX_KERNEL_LOG_DEBUG("name: %s, lane: %d", __func__, args->lane);
     load_src01_dst(args);
 
-    for (int i3 = 0; i3 < ne03; i3++) {
+    for (int64_t i3 = lane*(ne03/nlane); i3 < (lane+1)*(ne03/nlane); i3++) {
         for (int i2 = 0; i2 < ne02; i2++) {
             for (int i00 = 0; i00 < ne00; i00++) {
                 for (int i01 = 0; i01 < ne01; i01++) {
@@ -444,7 +446,7 @@ void* kernel_mul_mm_q8_0_f32(struct imax_kernel_args* args) {
     GGML_IMAX_KERNEL_LOG_DEBUG("name: %s, lane: %d", __func__, args->lane);
     load_src01_dst(args);
 
-    for (int i3 = 0; i3 < ne03; i3++) {
+    for (int64_t i3 = lane*(ne03/nlane); i3 < (lane+1)*(ne03/nlane); i3++) {
         for (int i2 = 0; i2 < ne02; i2++) {
             for (int i00 = 0; i00 < ne00; i00++) {
                 for (int i01 = 0; i01 < ne01; i01++) {
@@ -462,112 +464,112 @@ void* kernel_mul_mm_q8_0_f32(struct imax_kernel_args* args) {
     return NULL;
 }
 
-void* kernel_mul_mm_q2_K_f32(struct imax_kernel_args* args) {
-    GGML_IMAX_KERNEL_LOG_DEBUG("name: %s, lane: %d", __func__, args->lane);
-    load_src01_dst(args);
+//void* kernel_mul_mm_q2_K_f32(struct imax_kernel_args* args) {
+    //GGML_IMAX_KERNEL_LOG_DEBUG("name: %s, lane: %d", __func__, args->lane);
+    //load_src01_dst(args);
 
-    for (int i3 = 0; i3 < ne03; i3++) {
-        for (int i2 = 0; i2 < ne02; i2++) {
-            for (int i00 = 0; i00 < ne00; i00++) {
-                for (int i01 = 0; i01 < ne01; i01++) {
-                    for (int i11 = 0; i11 < ne11; i11++) {
-                        Uchar* src0 = &src0_p[i3*nb03 + i2*nb02 + i01*nb01 + i00*nb00];
-                        Uchar* src1 = &src1_p[i3*nb13 + i2*nb12 + i01*nb11 + i11*nb10];
-                        Uchar* dst  = &dst_p [i3*nb3  + i2*nb2  + i00*nb1  + i11*nb0 ];
-                        *dst += *src0 * *src1;
-                    }
-                }
-            }
-        }
-    }
+    //for (int i3 = 0; i3 < ne03; i3++) {
+        //for (int i2 = 0; i2 < ne02; i2++) {
+            //for (int i00 = 0; i00 < ne00; i00++) {
+                //for (int i01 = 0; i01 < ne01; i01++) {
+                    //for (int i11 = 0; i11 < ne11; i11++) {
+                        //Uchar* src0 = &src0_p[i3*nb03 + i2*nb02 + i01*nb01 + i00*nb00];
+                        //Uchar* src1 = &src1_p[i3*nb13 + i2*nb12 + i01*nb11 + i11*nb10];
+                        //Uchar* dst  = &dst_p [i3*nb3  + i2*nb2  + i00*nb1  + i11*nb0 ];
+                        //*dst += *src0 * *src1;
+                    //}
+                //}
+            //}
+        //}
+    //}
 
-    return NULL;
-}
+    //return NULL;
+//}
 
-void* kernel_mul_mm_q3_K_f32(struct imax_kernel_args* args) {
-    GGML_IMAX_KERNEL_LOG_DEBUG("name: %s, lane: %d", __func__, args->lane);
-    load_src01_dst(args);
+//void* kernel_mul_mm_q3_K_f32(struct imax_kernel_args* args) {
+    //GGML_IMAX_KERNEL_LOG_DEBUG("name: %s, lane: %d", __func__, args->lane);
+    //load_src01_dst(args);
 
-    for (int i3 = 0; i3 < ne03; i3++) {
-        for (int i2 = 0; i2 < ne02; i2++) {
-            for (int i00 = 0; i00 < ne00; i00++) {
-                for (int i01 = 0; i01 < ne01; i01++) {
-                    for (int i11 = 0; i11 < ne11; i11++) {
-                        Uchar* src0 = &src0_p[i3*nb03 + i2*nb02 + i01*nb01 + i00*nb00];
-                        Uchar* src1 = &src1_p[i3*nb13 + i2*nb12 + i01*nb11 + i11*nb10];
-                        Uchar* dst  = &dst_p [i3*nb3  + i2*nb2  + i00*nb1  + i11*nb0 ];
-                        *dst += *src0 * *src1;
-                    }
-                }
-            }
-        }
-    }
+    //for (int i3 = 0; i3 < ne03; i3++) {
+        //for (int i2 = 0; i2 < ne02; i2++) {
+            //for (int i00 = 0; i00 < ne00; i00++) {
+                //for (int i01 = 0; i01 < ne01; i01++) {
+                    //for (int i11 = 0; i11 < ne11; i11++) {
+                        //Uchar* src0 = &src0_p[i3*nb03 + i2*nb02 + i01*nb01 + i00*nb00];
+                        //Uchar* src1 = &src1_p[i3*nb13 + i2*nb12 + i01*nb11 + i11*nb10];
+                        //Uchar* dst  = &dst_p [i3*nb3  + i2*nb2  + i00*nb1  + i11*nb0 ];
+                        //*dst += *src0 * *src1;
+                    //}
+                //}
+            //}
+        //}
+    //}
 
-    return NULL;
-}
+    //return NULL;
+//}
 
-void* kernel_mul_mm_q4_K_f32(struct imax_kernel_args* args) {
-    GGML_IMAX_KERNEL_LOG_DEBUG("name: %s, lane: %d", __func__, args->lane);
-    load_src01_dst(args);
+//void* kernel_mul_mm_q4_K_f32(struct imax_kernel_args* args) {
+    //GGML_IMAX_KERNEL_LOG_DEBUG("name: %s, lane: %d", __func__, args->lane);
+    //load_src01_dst(args);
 
-    for (int i3 = 0; i3 < ne03; i3++) {
-        for (int i2 = 0; i2 < ne02; i2++) {
-            for (int i00 = 0; i00 < ne00; i00++) {
-                for (int i01 = 0; i01 < ne01; i01++) {
-                    for (int i11 = 0; i11 < ne11; i11++) {
-                        Uchar* src0 = &src0_p[i3*nb03 + i2*nb02 + i01*nb01 + i00*nb00];
-                        Uchar* src1 = &src1_p[i3*nb13 + i2*nb12 + i01*nb11 + i11*nb10];
-                        Uchar* dst  = &dst_p [i3*nb3  + i2*nb2  + i00*nb1  + i11*nb0 ];
-                        *dst += *src0 * *src1;
-                    }
-                }
-            }
-        }
-    }
+    //for (int i3 = 0; i3 < ne03; i3++) {
+        //for (int i2 = 0; i2 < ne02; i2++) {
+            //for (int i00 = 0; i00 < ne00; i00++) {
+                //for (int i01 = 0; i01 < ne01; i01++) {
+                    //for (int i11 = 0; i11 < ne11; i11++) {
+                        //Uchar* src0 = &src0_p[i3*nb03 + i2*nb02 + i01*nb01 + i00*nb00];
+                        //Uchar* src1 = &src1_p[i3*nb13 + i2*nb12 + i01*nb11 + i11*nb10];
+                        //Uchar* dst  = &dst_p [i3*nb3  + i2*nb2  + i00*nb1  + i11*nb0 ];
+                        //*dst += *src0 * *src1;
+                    //}
+                //}
+            //}
+        //}
+    //}
 
-    return NULL;
-}
+    //return NULL;
+//}
 
-void* kernel_mul_mm_q5_K_f32(struct imax_kernel_args* args) {
-    GGML_IMAX_KERNEL_LOG_DEBUG("name: %s, lane: %d", __func__, args->lane);
-    load_src01_dst(args);
+//void* kernel_mul_mm_q5_K_f32(struct imax_kernel_args* args) {
+    //GGML_IMAX_KERNEL_LOG_DEBUG("name: %s, lane: %d", __func__, args->lane);
+    //load_src01_dst(args);
 
-    for (int i3 = 0; i3 < ne03; i3++) {
-        for (int i2 = 0; i2 < ne02; i2++) {
-            for (int i00 = 0; i00 < ne00; i00++) {
-                for (int i01 = 0; i01 < ne01; i01++) {
-                    for (int i11 = 0; i11 < ne11; i11++) {
-                        Uchar* src0 = &src0_p[i3*nb03 + i2*nb02 + i01*nb01 + i00*nb00];
-                        Uchar* src1 = &src1_p[i3*nb13 + i2*nb12 + i01*nb11 + i11*nb10];
-                        Uchar* dst  = &dst_p [i3*nb3  + i2*nb2  + i00*nb1  + i11*nb0 ];
-                        *dst += *src0 * *src1;
-                    }
-                }
-            }
-        }
-    }
+    //for (int i3 = 0; i3 < ne03; i3++) {
+        //for (int i2 = 0; i2 < ne02; i2++) {
+            //for (int i00 = 0; i00 < ne00; i00++) {
+                //for (int i01 = 0; i01 < ne01; i01++) {
+                    //for (int i11 = 0; i11 < ne11; i11++) {
+                        //Uchar* src0 = &src0_p[i3*nb03 + i2*nb02 + i01*nb01 + i00*nb00];
+                        //Uchar* src1 = &src1_p[i3*nb13 + i2*nb12 + i01*nb11 + i11*nb10];
+                        //Uchar* dst  = &dst_p [i3*nb3  + i2*nb2  + i00*nb1  + i11*nb0 ];
+                        //*dst += *src0 * *src1;
+                    //}
+                //}
+            //}
+        //}
+    //}
 
-    return NULL;
-}
+    //return NULL;
+//}
 
-void* kernel_mul_mm_q6_K_f32(struct imax_kernel_args* args) {
-    GGML_IMAX_KERNEL_LOG_DEBUG("name: %s, lane: %d", __func__, args->lane);
-    load_src01_dst(args);
+//void* kernel_mul_mm_q6_K_f32(struct imax_kernel_args* args) {
+    //GGML_IMAX_KERNEL_LOG_DEBUG("name: %s, lane: %d", __func__, args->lane);
+    //load_src01_dst(args);
 
-    for (int i3 = 0; i3 < ne03; i3++) {
-        for (int i2 = 0; i2 < ne02; i2++) {
-            for (int i00 = 0; i00 < ne00; i00++) {
-                for (int i01 = 0; i01 < ne01; i01++) {
-                    for (int i11 = 0; i11 < ne11; i11++) {
-                        Uchar* src0 = &src0_p[i3*nb03 + i2*nb02 + i01*nb01 + i00*nb00];
-                        Uchar* src1 = &src1_p[i3*nb13 + i2*nb12 + i01*nb11 + i11*nb10];
-                        Uchar* dst  = &dst_p [i3*nb3  + i2*nb2  + i00*nb1  + i11*nb0 ];
-                        *dst += *src0 * *src1;
-                    }
-                }
-            }
-        }
-    }
+    //for (int i3 = 0; i3 < ne03; i3++) {
+        //for (int i2 = 0; i2 < ne02; i2++) {
+            //for (int i00 = 0; i00 < ne00; i00++) {
+                //for (int i01 = 0; i01 < ne01; i01++) {
+                    //for (int i11 = 0; i11 < ne11; i11++) {
+                        //Uchar* src0 = &src0_p[i3*nb03 + i2*nb02 + i01*nb01 + i00*nb00];
+                        //Uchar* src1 = &src1_p[i3*nb13 + i2*nb12 + i01*nb11 + i11*nb10];
+                        //Uchar* dst  = &dst_p [i3*nb3  + i2*nb2  + i00*nb1  + i11*nb0 ];
+                        //*dst += *src0 * *src1;
+                    //}
+                //}
+            //}
+        //}
+    //}
 
-    return NULL;
-}
+    //return NULL;
+//}

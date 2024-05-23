@@ -40,6 +40,7 @@ struct imax_kernel_args {
     int32_t dst_op_params [16];
 
     int nb;
+    int nlane;
     int lane;
 };
 
@@ -53,11 +54,11 @@ void* kernel_mul_mm_q4_1_f32     (struct imax_kernel_args* args);
 void* kernel_mul_mm_q5_0_f32     (struct imax_kernel_args* args);
 void* kernel_mul_mm_q5_1_f32     (struct imax_kernel_args* args);
 void* kernel_mul_mm_q8_0_f32     (struct imax_kernel_args* args);
-void* kernel_mul_mm_q2_K_f32     (struct imax_kernel_args* args);
-void* kernel_mul_mm_q3_K_f32     (struct imax_kernel_args* args);
-void* kernel_mul_mm_q4_K_f32     (struct imax_kernel_args* args);
-void* kernel_mul_mm_q5_K_f32     (struct imax_kernel_args* args);
-void* kernel_mul_mm_q6_K_f32     (struct imax_kernel_args* args);
+//void* kernel_mul_mm_q2_K_f32     (struct imax_kernel_args* args);
+//void* kernel_mul_mm_q3_K_f32     (struct imax_kernel_args* args);
+//void* kernel_mul_mm_q4_K_f32     (struct imax_kernel_args* args);
+//void* kernel_mul_mm_q5_K_f32     (struct imax_kernel_args* args);
+//void* kernel_mul_mm_q6_K_f32     (struct imax_kernel_args* args);
 
 // On Only CPU
 void* kernel_scale               (struct imax_kernel_args* args);

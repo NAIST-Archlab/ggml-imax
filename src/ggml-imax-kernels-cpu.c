@@ -353,8 +353,9 @@ static const ggml_type_traits_t type_traits[GGML_TYPE_COUNT] = {
     int32_t* src0_op_params = args_name->src0_op_params;  \
     int32_t* src1_op_params = args_name->src1_op_params;  \
     int32_t* src2_op_params = args_name->src2_op_params;  \
-    int32_t* dst_op_params  = args_name->dst_op_params;
-
+    int32_t* dst_op_params  = args_name->dst_op_params;   \
+    int32_t  nlane = args_name->nlane; \
+    int32_t   lane = args_name->lane
 
 void* kernel_upscale_f32(struct imax_kernel_args* args) {
     GGML_IMAX_KERNEL_LOG_DEBUG("name: %s, lane: %d", __func__, args->lane);
@@ -363,7 +364,7 @@ void* kernel_upscale_f32(struct imax_kernel_args* args) {
     GGML_ASSERT(nb00 == sizeof(float));
     int scale_factor = dst_op_params[0];
 
-    for (int i3 = 0; i3 < ne3; i3++) {
+    for (int i3 = lane*(ne3/nlane); i3 < (lane+1)*(ne3/nlane); i3++) {
         int64_t i03 = i3 / scale_factor;
         for (int i2 = 0; i2 < ne2; i2++) {
             int64_t i02 = i2 / scale_factor;
@@ -389,7 +390,7 @@ void* kernel_pad_f32(struct imax_kernel_args* args) {
     GGML_ASSERT(nb00 == sizeof(float));
     GGML_ASSERT(nb0  == sizeof(float));
 
-    for (int i3 = 0; i3 < ne3; i3++) {
+    for (int i3 = lane*(ne3/nlane); i3 < (lane+1)*(ne3/nlane); i3++) {
         for (int i2 = 0; i2 < ne2; i2++) {
             for (int i1 = 0; i1 < ne1; i1++) {
                 float* src0 = (float*)&src0_p[i3*nb03 + i2*nb02 + i1*nb01];
@@ -416,7 +417,7 @@ void* kernel_argsort_f32_i32_asc(struct imax_kernel_args* args) {
 
     GGML_ASSERT(nb0 == sizeof(float));
 
-    for (int64_t i = 0; i < nr; i++) {
+    for (int64_t i = lane*(nr/nlane); i < (lane+1)*(nr/nlane); i++) {
         int32_t *dst_data = (int32_t*)((char*)dst_p + i*nb1);
         const float *src_data = (float*)((char*)src0_p + i*nb01);
 
@@ -447,7 +448,7 @@ void* kernel_argsort_f32_i32_desc(struct imax_kernel_args* args) {
 
     GGML_ASSERT(nb0 == sizeof(float));
 
-    for (int64_t i = 0; i < nr; i++) {
+    for (int64_t i = lane*(nr/nlane); i < (lane+1)*(nr/nlane); i++) {
         int32_t *dst_data = (int32_t*)((char*)dst_p + i*nb1);
         const float *src_data = (float*)((char*)src0_p + i*nb01);
 
@@ -474,7 +475,7 @@ void kernel_sum_rows_f32(struct imax_kernel_args* args) {
     GGML_IMAX_KERNEL_LOG_DEBUG("name: %s, lane: %d", __func__, args->lane);
     load_src01_dst(args);
 
-    for (int i3 = 0; i3 < ne03; i3++) {
+    for (int i3 = lane*(ne03/nlane); i3 < (lane+1)*(ne03/nlane); i3++) {
         for (int i2 = 0; i2 < ne02; i2++) {
             for (int i1 = 0; i1 < ne01; i1++) {
                 float row_sum = 0;
@@ -512,7 +513,7 @@ void kernel_scale_f32(struct imax_kernel_args* args) {
 
     float v = *(float*)dst_op_params;
 
-    for (int i3 = 0; i3 < ne03; i3++) {
+    for (int i3 = lane*(ne03/nlane); i3 < (lane+1)*(ne03/nlane); i3++) {
         for (int i2 = 0; i2 < ne02; i2++) {
             for (int i1 = 0; i1 < ne01; i1++) {
                 float* src0 = (float*)&src0_p[i3*nb03 + i2*nb02 + i1*nb01];
@@ -546,7 +547,7 @@ void kernel_div_f32(struct imax_kernel_args* args) {
     GGML_IMAX_KERNEL_LOG_DEBUG("name: %s, lane: %d", __func__, args->lane);
     load_src01_dst(args);
 
-    for (int i3 = 0; i3 < ne03; i3++) {
+    for (int i3 = lane*(ne03/nlane); i3 < (lane+1)*(ne03/nlane); i3++) {
         for (int i2 = 0; i2 < ne02; i2++) {
             for (int i1 = 0; i1 < ne01; i1++) {
                 float* src0 = (float*)&src0_p[i3*nb03 + i2*nb02 + i1*nb01];
@@ -581,7 +582,7 @@ void kernel_sqr_f32(struct imax_kernel_args* args) {
     GGML_IMAX_KERNEL_LOG_DEBUG("name: %s, lane: %d", __func__, args->lane);
     load_src01_dst(args);
 
-    for (int i3 = 0; i3 < ne03; i3++) {
+    for (int i3 = lane*(ne03/nlane); i3 < (lane+1)*(ne03/nlane); i3++) {
         for (int i2 = 0; i2 < ne02; i2++) {
             for (int i1 = 0; i1 < ne01; i1++) {
                 float* src0 = (float*)&src0_p[i3*nb03 + i2*nb02 + i1*nb01];
@@ -631,18 +632,10 @@ void* kernel_softmax(struct imax_kernel_args* args) {
     const int nc = ne00;
     const int nr = ne10*ne11*ne12*ne13;
 
-    //// rows per thread
-    //const int dr = (nr + nth - 1)/nth;
-
-    //// row range for this thread
-    //const int ir0 = dr*ith;
-    //const int ir1 = MIN(ir0 + dr, nr);
-
-
     // when max_bias <= 0.0f, src2 is not used and we default it to src0 to avoid branching
     float * pos = src2_p ? (float *) src2_p : src0_p;
 
-    for (int i1 = 0; i1 < nr; i1++) {
+    for (int i1 = lane*(nr/nlane); i1 < (lane+1)*(nr/nlane); i1++) {
         float * sp = (float *)((char *) src0_p + i1*nb01);
         float * wp = (float *) wdata; 
         float * mp = src1_p ? (float *)((char *) src1_p + (i1%ne11)*nb11) : NULL;
@@ -701,7 +694,7 @@ void kernel_rms_norm_f32(struct imax_kernel_args* args) {
     float eps = ((float*)dst_op_params)[0];
 
     // TODO: optimize
-    for (int64_t i03 = 0; i03 < ne03; i03++) {
+    for (int64_t i03 = lane*(ne03/nlane); i03 < (lane+1)*(ne03/nlane); i03++) {
         for (int64_t i02 = 0; i02 < ne02; i02++) {
             for (int64_t i01 = 0; i01 < ne01; i01++) {
                 const float * x = (float *) ((char *) src0_p + i01*nb01 + i02*nb02 + i03*nb03);
@@ -753,7 +746,7 @@ void kernel_norm_f32(struct imax_kernel_args* args) {
 
     const float eps = 1e-6f;
 
-    for (int64_t i03 = 0; i03 < ne03; i03++) {
+    for (int64_t i03 = lane*(ne03/nlane); i03 < (lane+1)*(ne03/nlane); i03++) {
         for (int64_t i02 = 0; i02 < ne02; i02++) {
             for (int64_t i01 = 0; i01 < ne01; i01++) {
                 double sum = 0.0;
@@ -819,7 +812,7 @@ static void kernel_get_rows_q(struct imax_kernel_args* args) {
 
     ggml_to_float_t dequantize_row_q = type_traits[args->src0_type].to_float;
 
-    for (int64_t i12 = 0; i12 < ne12; i12++) {
+    for (int64_t i12 = lane*(ne12/nlane); i12 < (lane+1)*(ne12/nlane); i12++) {
         for (int64_t i11 = 0; i11 < ne11; i11++) {
             for (int64_t i10 = 0; i10 < ne10; i10++) {
                 const int64_t i01 = *(int32_t *)(&src1_p[i12*nb12 + i11*nb11 + i10*nb10]);
@@ -844,7 +837,7 @@ static void kernel_get_rows_f16(struct imax_kernel_args* args) {
     GGML_ASSERT(nb00 == sizeof(ggml_fp16_t));
     GGML_ASSERT(ne1*ne2*ne3 == nr);
 
-    for (int64_t i12 = 0; i12 < ne12; i12++) {
+    for (int64_t i12 = lane*(ne12/nlane); i12 < (lane+1)*(ne12/nlane); i12++) {
         for (int64_t i11 = 0; i11 < ne11; i11++) {
             float* dst = (float*)&dst_p[i12*nb3 + i11*nb2];
             ggml_fp16_t* src0 = (ggml_fp16_t*)&src0_p[i12*nb03 + i11*nb02];
@@ -872,7 +865,7 @@ static void kernel_get_rows_f32(struct imax_kernel_args* args) {
     GGML_ASSERT(nb00 == sizeof(float));
     GGML_ASSERT(ne1*ne2*ne3 == nr);
 
-    for (int64_t i12 = 0; i12 < ne12; i12++) {
+    for (int64_t i12 = lane*(ne12/nlane); i12 < (lane+1)*(ne12/nlane); i12++) {
         for (int64_t i11 = 0; i11 < ne11; i11++) {
             float* dst = (float*)&dst_p[i12*nb3 + i11*nb2];
             float* src0 = (float*)&src0_p[i12*nb03 + i11*nb02];
@@ -950,7 +943,7 @@ void kernel_alibi_f32(struct imax_kernel_args* args) {
     float m0 = powf(2.0f, -(max_bias) / n_heads_log2_floor);
     float m1 = powf(2.0f, -(max_bias / 2.0f) /n_heads_log2_floor);
 
-    for (int64_t k = 0; k < ne2_ne3; k++) {
+    for (int64_t k = lane*(ne2_ne3/nlane); k < (lane+1)*(ne2_ne3/nlane); k++) {
         float m_k;
 
         if (k < n_heads_log2_floor) {
@@ -991,40 +984,49 @@ void* kernel_alibi(struct imax_kernel_args* args) {
     return NULL;
 }
 
+// TODO
 void* kernel_rope(struct imax_kernel_args* args) {
     GGML_IMAX_KERNEL_LOG_DEBUG("name: %s, lane: %d", __func__, args->lane);
     return NULL;
 }
 
+// TODO
 void* kernel_im2col(struct imax_kernel_args* args) {
     GGML_IMAX_KERNEL_LOG_DEBUG("name: %s, lane: %d", __func__, args->lane);
     return NULL;
 }
 
+// TODO
 void* kernel_pool_1d(struct imax_kernel_args* args) {
     GGML_IMAX_KERNEL_LOG_DEBUG("name: %s, lane: %d", __func__, args->lane);
     return NULL;
 }
 
+// TODO
 void* kernel_pool_2d(struct imax_kernel_args* args) {
     GGML_IMAX_KERNEL_LOG_DEBUG("name: %s, lane: %d", __func__, args->lane);
     return NULL;
 }
 
+// TODO
 void* kernel_leaky_relu(struct imax_kernel_args* args) {
     GGML_IMAX_KERNEL_LOG_DEBUG("name: %s, lane: %d", __func__, args->lane);
     return NULL;
 }
 
+#define IS_CONTIGUOUS(nb0, nb1, nb2, nb3, ne0, ne1, ne2, ne3, type) \
+    nb0 == ggml_type_size(type) && \
+    nb1 == nb0*ne0/ggml_blck_size(type) && \
+    nb2 == nb1*ne1 && \
+    nb3 == nb2*ne2
+
 void kernel_dup_bytes(struct imax_kernel_args* args) {
     GGML_IMAX_KERNEL_LOG_DEBUG("name: %s, lane: %d", __func__, args->lane);
     load_src01_dst(args);
 
-    // at same types
-    if (args->src0_type == args->dst_type && 
-        ne00 == ne0 &&
-        nb00 == ggml_type_size(args->src0_type) && nb0 == ggml_type_size(args->dst_type)) {
-        for (int i3 = 0; i3 < ne03; i3++) {
+    // at same size
+    if (ne00 == ne0 && args->src0_type == args->dst_type) {
+        for (int64_t i3 = lane*(ne03/nlane); i3 < (lane+1)*(ne03/nlane); i3++) {
             for (int i2 = 0; i2 < ne02; i2++) {
                 for (int i1 = 0; i1 < ne01; i1++) {
                     uint8_t* src0 = &src0_p[i3*nb03 + i2*nb02 + i1*nb01];
@@ -1038,9 +1040,59 @@ void kernel_dup_bytes(struct imax_kernel_args* args) {
         return;
     }
 
-    // TODO: impl
-    GGML_ASSERT(false);
+    int64_t i10 = 0;
+    int64_t i11 = 0;
+    int64_t i12 = 0;
+    int64_t i13 = 0;
 
+    for (int64_t i3 = lane*(ne03/nlane); i3 < (lane+1)*(ne03/nlane); i3++) {
+        for (int i2 = 0; i2 < ne02; i2++) {
+            while (i10 >= ne0) {
+                i10 -= ne0;
+                i11++;
+                while (i11 >= ne1) {
+                    i11 -= ne1;
+                    i12++;
+                    while (i12 >= ne2) {
+                        i12 -= ne2;
+                        i13++;
+                    }
+                }
+            }
+            for (int i1 = 0; i1 < ne01; i1++) {
+                uint8_t* src0 = &src0_p[i3*nb03 + i2*nb02 + i1*nb01];
+                uint8_t* dst  = &dst_p [i13*nb3  + i12*nb2  + i11*nb1 ];
+                for (int i0 = 0; i0 < ne00; i0++) {
+                    memcpy(&dst[i10], &src0[i0], nb00);
+                    if (++i10 >= ne0) {
+                        i10 = 0;
+                        i11++;
+                        if (i11 >= ne1) {
+                            i11 = 0;
+                            i12++;
+                            if (i12 >= ne2) {
+                                i12 = 0;
+                                i13++;
+                            }
+                        }
+                    }
+                }
+            }
+            i10 += ne00 * ne01;
+            while (i10 >= ne0) {
+                i10 -= ne0;
+                i11++;
+                while (i11 >= ne1) {
+                    i11 -= ne1;
+                    i12++;
+                    while (i12 >= ne2) {
+                        i12 -= ne2;
+                        i13++;
+                    }
+                }
+            }
+        }
+    }
 }
 
 void kernel_dup_f32(struct imax_kernel_args* args) {
@@ -1048,10 +1100,8 @@ void kernel_dup_f32(struct imax_kernel_args* args) {
     load_src01_dst(args);
 
     // at same types
-    if (args->src0_type == args->dst_type && 
-        ne00 == ne0 &&
-        nb00 == ggml_type_size(args->src0_type) && nb0 == ggml_type_size(args->dst_type)) {
-        for (int i3 = 0; i3 < ne03; i3++) {
+    if (args->src0_type == args->dst_type && ne00 == ne0) {
+        for (int64_t i3 = lane*(ne03/nlane); i3 < (lane+1)*(ne03/nlane); i3++) {
             for (int i2 = 0; i2 < ne02; i2++) {
                 for (int i1 = 0; i1 < ne01; i1++) {
                     float* src0 = &src0_p[i3*nb03 + i2*nb02 + i1*nb01];
@@ -1065,8 +1115,76 @@ void kernel_dup_f32(struct imax_kernel_args* args) {
         return;
     }
 
-    // TODO: impl
-    GGML_ASSERT(false);
+
+    if (type_traits[args->dst_type].from_float) {
+        ggml_from_float_t const quantize_row_q = type_traits[args->dst_type].from_float;
+
+        for (int64_t i3 = lane*(ne03/nlane); i3 < (lane+1)*(ne03/nlane); i3++) {
+            for (int i2 = 0; i2 < ne02; i2++) {
+                for (int i1 = 0; i1 < ne01; i1++) {
+                    float* src0 = (float*)&src0_p[i3*nb03 + i2*nb02 + i1*nb01];
+                    float* dst  = (float*)&dst_p [i3*nb3  + i2*nb2  + i1*nb1 ];
+                    quantize_row_q(src0, dst, ne00);
+                }
+            }
+        }
+
+        return;
+    }
+
+    int64_t i10 = 0;
+    int64_t i11 = 0;
+    int64_t i12 = 0;
+    int64_t i13 = 0;
+
+    for (int64_t i3 = lane*(ne03/nlane); i3 < (lane+1)*(ne03/nlane); i3++) {
+        for (int i2 = 0; i2 < ne02; i2++) {
+            while (i10 >= ne0) {
+                i10 -= ne0;
+                i11++;
+                while (i11 >= ne1) {
+                    i11 -= ne1;
+                    i12++;
+                    while (i12 >= ne2) {
+                        i12 -= ne2;
+                        i13++;
+                    }
+                }
+            }
+            for (int i1 = 0; i1 < ne01; i1++) {
+                uint8_t* src0 = &src0_p[i3*nb03 + i2*nb02 + i1*nb01];
+                uint8_t* dst  = &dst_p [i13*nb3  + i12*nb2  + i11*nb1 ];
+                for (int i0 = 0; i0 < ne00; i0++) {
+                    memcpy(&dst[i10], &src0[i0], nb00);
+                    if (++i10 >= ne0) {
+                        i10 = 0;
+                        i11++;
+                        if (i11 >= ne1) {
+                            i11 = 0;
+                            i12++;
+                            if (i12 >= ne2) {
+                                i12 = 0;
+                                i13++;
+                            }
+                        }
+                    }
+                }
+            }
+            i10 += ne00 * ne01;
+            while (i10 >= ne0) {
+                i10 -= ne0;
+                i11++;
+                while (i11 >= ne1) {
+                    i11 -= ne1;
+                    i12++;
+                    while (i12 >= ne2) {
+                        i12 -= ne2;
+                        i13++;
+                    }
+                }
+            }
+        }
+    }
 }
 
 void* kernel_dup(struct imax_kernel_args* args) {
@@ -1107,16 +1225,19 @@ void* kernel_contiguous(struct imax_kernel_args* args) {
     return NULL;
 }
 
+// TODO
 void* kernel_transpose(struct imax_kernel_args* args) {
     GGML_IMAX_KERNEL_LOG_DEBUG("name: %s, lane: %d", __func__, args->lane);
     return NULL;
 }
 
+// TODO
 void* kernel_diag_mask_inf(struct imax_kernel_args* args) {
     GGML_IMAX_KERNEL_LOG_DEBUG("name: %s, lane: %d", __func__, args->lane);
     return NULL;
 }
 
+// TODO
 void* kernel_unary(struct imax_kernel_args* args) {
     GGML_IMAX_KERNEL_LOG_DEBUG("name: %s, lane: %d", __func__, args->lane);
     return NULL;

@@ -164,11 +164,11 @@ enum ggml_imax_kernel_type {
     GGML_IMAX_KERNEL_TYPE_MUL_MM_Q5_0_F32,
     GGML_IMAX_KERNEL_TYPE_MUL_MM_Q5_1_F32,
     GGML_IMAX_KERNEL_TYPE_MUL_MM_Q8_0_F32,
-    GGML_IMAX_KERNEL_TYPE_MUL_MM_Q2_K_F32,
-    GGML_IMAX_KERNEL_TYPE_MUL_MM_Q3_K_F32,
-    GGML_IMAX_KERNEL_TYPE_MUL_MM_Q4_K_F32,
-    GGML_IMAX_KERNEL_TYPE_MUL_MM_Q5_K_F32,
-    GGML_IMAX_KERNEL_TYPE_MUL_MM_Q6_K_F32,
+    //GGML_IMAX_KERNEL_TYPE_MUL_MM_Q2_K_F32,
+    //GGML_IMAX_KERNEL_TYPE_MUL_MM_Q3_K_F32,
+    //GGML_IMAX_KERNEL_TYPE_MUL_MM_Q4_K_F32,
+    //GGML_IMAX_KERNEL_TYPE_MUL_MM_Q5_K_F32,
+    //GGML_IMAX_KERNEL_TYPE_MUL_MM_Q6_K_F32,
     GGML_IMAX_KERNEL_TYPE_UPSCALE_F32,
     GGML_IMAX_KERNEL_TYPE_PAD_F32,
     GGML_IMAX_KERNEL_TYPE_ARGSORT_F32_I32_ASC,
@@ -304,11 +304,11 @@ for (int i = 0; i < nlane; i++) {
         GGML_IMAX_ADD_KERNEL(GGML_IMAX_KERNEL_TYPE_MUL_MM_Q5_0_F32,           mul_mm_q5_0_f32,        true);
         GGML_IMAX_ADD_KERNEL(GGML_IMAX_KERNEL_TYPE_MUL_MM_Q5_1_F32,           mul_mm_q5_1_f32,        true);
         GGML_IMAX_ADD_KERNEL(GGML_IMAX_KERNEL_TYPE_MUL_MM_Q8_0_F32,           mul_mm_q8_0_f32,        true);
-        GGML_IMAX_ADD_KERNEL(GGML_IMAX_KERNEL_TYPE_MUL_MM_Q2_K_F32,           mul_mm_q2_K_f32,        true);
-        GGML_IMAX_ADD_KERNEL(GGML_IMAX_KERNEL_TYPE_MUL_MM_Q3_K_F32,           mul_mm_q3_K_f32,        true);
-        GGML_IMAX_ADD_KERNEL(GGML_IMAX_KERNEL_TYPE_MUL_MM_Q4_K_F32,           mul_mm_q4_K_f32,        true);
-        GGML_IMAX_ADD_KERNEL(GGML_IMAX_KERNEL_TYPE_MUL_MM_Q5_K_F32,           mul_mm_q5_K_f32,        true);
-        GGML_IMAX_ADD_KERNEL(GGML_IMAX_KERNEL_TYPE_MUL_MM_Q6_K_F32,           mul_mm_q6_K_f32,        true);
+        //GGML_IMAX_ADD_KERNEL(GGML_IMAX_KERNEL_TYPE_MUL_MM_Q2_K_F32,           mul_mm_q2_K_f32,        true);
+        //GGML_IMAX_ADD_KERNEL(GGML_IMAX_KERNEL_TYPE_MUL_MM_Q3_K_F32,           mul_mm_q3_K_f32,        true);
+        //GGML_IMAX_ADD_KERNEL(GGML_IMAX_KERNEL_TYPE_MUL_MM_Q4_K_F32,           mul_mm_q4_K_f32,        true);
+        //GGML_IMAX_ADD_KERNEL(GGML_IMAX_KERNEL_TYPE_MUL_MM_Q5_K_F32,           mul_mm_q5_K_f32,        true);
+        //GGML_IMAX_ADD_KERNEL(GGML_IMAX_KERNEL_TYPE_MUL_MM_Q6_K_F32,           mul_mm_q6_K_f32,        true);
 
         // On CPU Only
         GGML_IMAX_ADD_KERNEL(GGML_IMAX_KERNEL_TYPE_SCALE,                     scale,                  true);
@@ -505,7 +505,8 @@ static bool ggml_imax_graph_compute(
     args_name.src1_ne[0] = ne10;args_name.src1_ne[1] = ne11;args_name.src1_ne[2] = ne12;args_name.src1_ne[3] = ne13;\
     args_name.src1_nb[0] = nb10;args_name.src1_nb[1] = nb11;args_name.src1_nb[2] = nb12;args_name.src1_nb[3] = nb13;\
     args_name.dst_ne[0]  = ne0; args_name.dst_ne[1]  = ne1;args_name.dst_ne[2]   = ne2; args_name.dst_ne[3]  =  ne3;\
-    args_name.dst_nb[0]  = nb0; args_name.dst_nb[1]  = nb1;args_name.dst_nb[2]   = nb2; args_name.dst_nb[3]  =  nb3
+    args_name.dst_nb[0]  = nb0; args_name.dst_nb[1]  = nb1;args_name.dst_nb[2]   = nb2; args_name.dst_nb[3]  =  nb3;\
+    args_name.nlane = nlane
 
             switch (dst->op) {
                 case GGML_OP_ADD:
