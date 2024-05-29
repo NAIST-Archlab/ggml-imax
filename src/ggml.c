@@ -2371,7 +2371,7 @@ enum ggml_type ggml_ftype_to_ggml_type(enum ggml_ftype ftype) {
 }
 
 size_t ggml_tensor_overhead(void) {
-    return GGML_OBJECT_SIZE + GGML_TENSOR_SIZE;
+    return GGML_OBJECT_SIZE + GGML_TENSOR_SIZE; // 32+368=400 bytes
 }
 
 GGML_CALL bool ggml_is_transposed(const struct ggml_tensor * tensor) {

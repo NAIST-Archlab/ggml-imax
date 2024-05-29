@@ -993,12 +993,154 @@ void* kernel_rope(struct imax_kernel_args* args) {
 // TODO
 void* kernel_im2col(struct imax_kernel_args* args) {
     GGML_IMAX_KERNEL_LOG_DEBUG("name: %s, lane: %d", __func__, args->lane);
+    load_src01_dst(args);
+
+    int s0 = dst_op_params[0];
+    int s1 = dst_op_params[1];
+    int p0 = dst_op_params[2];
+    int p1 = dst_op_params[3];
+    int d0 = dst_op_params[4];
+    int d1 = dst_op_params[5];
+    bool is_2D = dst_op_params[6] == 1;
+
+    int N = is_2D ? ne13 : ne12;
+    int IC = is_2D ? ne12 : ne11;
+    int IH = is_2D ? ne11 : 1;
+    int IW = ne10;
+
+    int KH = is_2D ? ne01 : 1;
+    int KW = ne00;
+
+    int OH = is_2D ? ne2 : 1;
+    int OW = ne1;
+
+    int ofs0 = is_2D ? nb13 : nb12;
+    int ofs1 = is_2D ? nb12 : nb11;
+
+    // im2col: [N, IC, IH, IW] => [N, OH, OW, IC*KH*KW]
+    float * wdata = (float *) &dst_p;
+
+    // lanes on N
+    for (int in = lane*(N/nlane); in < (lane+1)*(N/nlane); in++) {
+        for (int ioh = 0; ioh<OH; ioh++) {
+            for (int64_t iow = 0; iow < OW; iow++) {
+                for (int64_t iic = 0; iic < IC; iic++) {
+                    
+                    // micro kernel
+                    float * dst_data = (float *) &wdata[(in*OH*OW + ioh*OW + iow)*(IC*KH*KW)];
+                    float * src_data = (float *) &src1_p[(in*ofs0 + iic*ofs1)];
+
+                    for (int64_t ikh = 0; ikh < KH; ikh++) {  // 1
+                        for (int64_t ikw = 0; ikw < KW; ikw++) {
+                            const int64_t iiw = iow*s0 + ikw*d0 - p0;
+                            const int64_t iih = ioh*s1 + ikh*d1 - p1;
+
+                            if (iih < 0 || iih >= IH || iiw < 0 || iiw >= IW) {
+                                dst_data[iic*(KH*KW) + ikh*KW + ikw] = 0;
+                            } else {
+                                dst_data[iic*(KH*KW) + ikh*KW + ikw] = (src_data[iih*IW + iiw]);
+                            }
+                        }
+                    }
+
+                }
+            }
+        }
+    }
+
+
     return NULL;
 }
 
 // TODO
 void* kernel_pool_1d(struct imax_kernel_args* args) {
     GGML_IMAX_KERNEL_LOG_DEBUG("name: %s, lane: %d", __func__, args->lane);
+    load_src01_dst(args);
+
+    enum ggml_op_pool op = dst_op_params[0];
+    const int k0 = dst_op_params[1];
+    const int s0 = dst_op_params[2];
+    const int p0 = dst_op_params[3];
+    
+    // ggml_compute_forward_pool_1d_sk_p0(params, op, k0, dst);
+    const char * cdata = (const char *) src0_p;
+    const char * cdata_end = cdata + ne00*nb00;
+    float * drow = (float *) dst_p;
+    int64_t total_elements = (cdata_end - cdata) / nb01;
+
+    const int64_t rs = ne00;
+
+    for (int in = lane*(total_elements/nlane);
+        in < (lane+1)*(total_elements/nlane);
+        ++in) {
+            const char * cdata_lane = cdata + in * nb01;
+            const float * const srow = (const float *)cdata_lane;
+
+            for (int64_t i = 0; i < rs; ++i) {
+                int j = 0;
+
+                switch (op) {
+                    case GGML_OP_POOL_AVG:   drow[i] = 0;        break;
+                    case GGML_OP_POOL_MAX:   drow[i] = -3.4e38;  break;
+                    case GGML_OP_POOL_COUNT: GGML_ASSERT(false); break;
+                }
+
+                for (int ki = 0; ki < k0; ++ki) {
+                    switch (op) {
+                        case GGML_OP_POOL_AVG:                          drow[i] += srow[j]; break;
+                        case GGML_OP_POOL_MAX:   if (srow[j] > drow[i]) drow[i]  = srow[j]; break;
+                        case GGML_OP_POOL_COUNT:                        GGML_ASSERT(false); break;
+                    }
+                    ++j;
+                }
+
+                switch (op) {
+                    case GGML_OP_POOL_AVG:         drow[i] /= k0; break;
+                    case GGML_OP_POOL_MAX:                       break;
+                    case GGML_OP_POOL_COUNT: GGML_ASSERT(false); break;
+                }
+            }
+
+            drow  += rs;
+
+        }
+
+    // no lane
+    // for (const char * cdata = (const char *) src0_p; 
+    //     cdata < cdata_end; 
+    //     cdata += nb01) {
+    
+    //     const float * const srow = (const float *)cdata;
+
+    //     for (int64_t i = 0; i < rs; ++i) {
+    //         int j = 0;
+
+    //         switch (op) {
+    //             case GGML_OP_POOL_AVG:   drow[i] = 0;        break;
+    //             case GGML_OP_POOL_MAX:   drow[i] = -3.4e38;  break;
+    //             case GGML_OP_POOL_COUNT: GGML_ASSERT(false); break;
+    //         }
+
+    //         for (int ki = 0; ki < k0; ++ki) {
+    //             switch (op) {
+    //                 case GGML_OP_POOL_AVG:                          drow[i] += srow[j]; break;
+    //                 case GGML_OP_POOL_MAX:   if (srow[j] > drow[i]) drow[i]  = srow[j]; break;
+    //                 case GGML_OP_POOL_COUNT:                        GGML_ASSERT(false); break;
+    //             }
+    //             ++j;
+    //         }
+
+    //         switch (op) {
+    //             case GGML_OP_POOL_AVG:         drow[i] /= k0; break;
+    //             case GGML_OP_POOL_MAX:                       break;
+    //             case GGML_OP_POOL_COUNT: GGML_ASSERT(false); break;
+    //         }
+    //     }
+
+    //     drow  += rs;
+    // }
+
+
     return NULL;
 }
 

@@ -62,14 +62,14 @@ void load_model(test_model & model, bool use_gpu = false) {
         buffer_size += KW * KH * IC * OC * ggml_type_size(GGML_TYPE_F16); // tensor a
         buffer_size += IW * IH * IC * N  * ggml_type_size(GGML_TYPE_F32); // tensor b
         buffer_size += 1024; // overhead
-    }
+    } // 4744
 
     printf("%s: ggml tensor size    = %d bytes\n", __func__, (int) sizeof(ggml_tensor));
     printf("%s: backend buffer size = %0.2f MB\n", __func__, (buffer_size/ 1024.f/ 1024.f));
 
     int num_tensors = 2;
     struct ggml_init_params params {
-            /*.mem_size   =*/ ggml_tensor_overhead() * num_tensors,
+            /*.mem_size   =*/ ggml_tensor_overhead() * num_tensors, // 400 * 2 = 800 bytes
             /*.mem_buffer =*/ NULL,
             /*.no_alloc   =*/ true,
     };

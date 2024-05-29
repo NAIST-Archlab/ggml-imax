@@ -532,7 +532,7 @@ extern "C" {
         char padding[4];
     };
 
-    static const size_t GGML_OBJECT_SIZE = sizeof(struct ggml_object);
+    static const size_t GGML_OBJECT_SIZE = sizeof(struct ggml_object); //32
 
     // n-dimensional tensor
     struct ggml_tensor {
@@ -575,7 +575,7 @@ extern "C" {
         char padding[8];
     };
 
-    static const size_t GGML_TENSOR_SIZE = sizeof(struct ggml_tensor);
+    static const size_t GGML_TENSOR_SIZE = sizeof(struct ggml_tensor); //368
 
     // Abort callback
     // If not NULL, called before ggml computation
