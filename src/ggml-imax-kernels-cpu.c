@@ -1064,81 +1064,44 @@ void* kernel_pool_1d(struct imax_kernel_args* args) {
     
     // ggml_compute_forward_pool_1d_sk_p0(params, op, k0, dst);
     const char * cdata = (const char *) src0_p;
-    const char * cdata_end = cdata + ne00*nb00;
+    const char * data_end = cdata + ne00*nb00;
     float * drow = (float *) dst_p;
-    int64_t total_elements = (cdata_end - cdata) / nb01;
+    int64_t total_elements = (data_end - cdata) / nb01;
 
     const int64_t rs = ne00;
 
-    for (int in = lane*(total_elements/nlane);
-        in < (lane+1)*(total_elements/nlane);
-        ++in) {
-            const char * cdata_lane = cdata + in * nb01;
-            const float * const srow = (const float *)cdata_lane;
+    while (cdata < data_end) {
+        const int lane_size = rs / nlane;
 
-            for (int64_t i = 0; i < rs; ++i) {
-                int j = 0;
+        const float *srow = (const float *) (cdata + lane * lane_size * sizeof(float) );
+        float *drow_lane = drow + lane * lane_size;
 
-                switch (op) {
-                    case GGML_OP_POOL_AVG:   drow[i] = 0;        break;
-                    case GGML_OP_POOL_MAX:   drow[i] = -3.4e38;  break;
-                    case GGML_OP_POOL_COUNT: GGML_ASSERT(false); break;
-                }
+        int j = 0; // j for loop drow
 
-                for (int ki = 0; ki < k0; ++ki) {
-                    switch (op) {
-                        case GGML_OP_POOL_AVG:                          drow[i] += srow[j]; break;
-                        case GGML_OP_POOL_MAX:   if (srow[j] > drow[i]) drow[i]  = srow[j]; break;
-                        case GGML_OP_POOL_COUNT:                        GGML_ASSERT(false); break;
-                    }
-                    ++j;
-                }
-
-                switch (op) {
-                    case GGML_OP_POOL_AVG:         drow[i] /= k0; break;
-                    case GGML_OP_POOL_MAX:                       break;
-                    case GGML_OP_POOL_COUNT: GGML_ASSERT(false); break;
-                }
+        for (int64_t i = 0; i < lane_size; ++i) {
+            switch (op) {
+                case GGML_OP_POOL_AVG:   drow_lane[i] = 0;        break;
+                case GGML_OP_POOL_MAX:   drow_lane[i] = -3e33; break;
+                case GGML_OP_POOL_COUNT: GGML_ASSERT(false); break;
             }
-
-            drow  += rs;
-
+            for (int ki = 0; ki < k0; ++ki) {
+                switch (op) {
+                    case GGML_OP_POOL_AVG:                          drow_lane[i] += srow[j]; break;
+                    case GGML_OP_POOL_MAX:   if (srow[j] > drow_lane[i]) drow_lane[i]  = srow[j]; break;
+                    case GGML_OP_POOL_COUNT:                        GGML_ASSERT(false); break;
+                }
+                ++j;
+            }
+            switch (op) {
+                case GGML_OP_POOL_AVG:         drow_lane[i] /= k0; break;
+                case GGML_OP_POOL_MAX:                       break;
+                case GGML_OP_POOL_COUNT: GGML_ASSERT(false); break;
+            }
         }
 
-    // no lane
-    // for (const char * cdata = (const char *) src0_p; 
-    //     cdata < cdata_end; 
-    //     cdata += nb01) {
-    
-    //     const float * const srow = (const float *)cdata;
-
-    //     for (int64_t i = 0; i < rs; ++i) {
-    //         int j = 0;
-
-    //         switch (op) {
-    //             case GGML_OP_POOL_AVG:   drow[i] = 0;        break;
-    //             case GGML_OP_POOL_MAX:   drow[i] = -3.4e38;  break;
-    //             case GGML_OP_POOL_COUNT: GGML_ASSERT(false); break;
-    //         }
-
-    //         for (int ki = 0; ki < k0; ++ki) {
-    //             switch (op) {
-    //                 case GGML_OP_POOL_AVG:                          drow[i] += srow[j]; break;
-    //                 case GGML_OP_POOL_MAX:   if (srow[j] > drow[i]) drow[i]  = srow[j]; break;
-    //                 case GGML_OP_POOL_COUNT:                        GGML_ASSERT(false); break;
-    //             }
-    //             ++j;
-    //         }
-
-    //         switch (op) {
-    //             case GGML_OP_POOL_AVG:         drow[i] /= k0; break;
-    //             case GGML_OP_POOL_MAX:                       break;
-    //             case GGML_OP_POOL_COUNT: GGML_ASSERT(false); break;
-    //         }
-    //     }
-
-    //     drow  += rs;
-    // }
+        cdata += nb01;
+        drow  += rs;
+    }
 
 
     return NULL;
