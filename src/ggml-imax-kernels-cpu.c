@@ -330,26 +330,32 @@ static const ggml_type_traits_t type_traits[GGML_TYPE_COUNT] = {
     uint64_t    ne01 =  args_name->src0_ne[1];\
     uint64_t    ne02 =  args_name->src0_ne[2];\
     uint64_t    ne03 =  args_name->src0_ne[3];\
+    uint64_t    *SRC0NE  =  args_name->src0_ne;\
     uint64_t    nb00 =  args_name->src0_nb[0];\
     uint64_t    nb01 =  args_name->src0_nb[1];\
     uint64_t    nb02 =  args_name->src0_nb[2];\
     uint64_t    nb03 =  args_name->src0_nb[3];\
+    uint64_t    *SRC0NB  =  args_name->src0_nb;\
     uint64_t    ne10 =  args_name->src1_ne[0];\
     uint64_t    ne11 =  args_name->src1_ne[1];\
     uint64_t    ne12 =  args_name->src1_ne[2];\
     uint64_t    ne13 =  args_name->src1_ne[3];\
+    uint64_t    *SRC1NE  =  args_name->src1_ne;\
     uint64_t    nb10 =  args_name->src1_nb[0];\
     uint64_t    nb11 =  args_name->src1_nb[1];\
     uint64_t    nb12 =  args_name->src1_nb[2];\
     uint64_t    nb13 =  args_name->src1_nb[3];\
+    uint64_t    *SRC1NB  =  args_name->src1_nb;\
     uint64_t    ne0  =  args_name->dst_ne[0]; \
     uint64_t    ne1  =  args_name->dst_ne[1]; \
     uint64_t    ne2  =  args_name->dst_ne[2]; \
     uint64_t    ne3  =  args_name->dst_ne[3]; \
+    uint64_t    *DSTNE =  args_name->dst_ne; \
     uint64_t    nb0  =  args_name->dst_nb[0]; \
     uint64_t    nb1  =  args_name->dst_nb[1]; \
     uint64_t    nb2  =  args_name->dst_nb[2]; \
     uint64_t    nb3  =  args_name->dst_nb[3]; \
+    uint64_t    *DSTNB =  args_name->dst_nb; \
     int32_t* src0_op_params = args_name->src0_op_params;  \
     int32_t* src1_op_params = args_name->src1_op_params;  \
     int32_t* src2_op_params = args_name->src2_op_params;  \
@@ -1052,6 +1058,26 @@ void* kernel_im2col(struct imax_kernel_args* args) {
     return NULL;
 }
 
+size_t cal_nbytes(struct imax_kernel_args* args) {
+    load_src01_dst(args);
+    size_t nbytes;
+    size_t blck_size = ggml_blck_size(args->src0_type);
+    if (blck_size == 1) {
+        nbytes = ggml_type_size(args->src0_type);
+        for (int i = 0; i < GGML_MAX_DIMS; ++i) {
+            nbytes += (SRC0NE[i] - 1)*SRC0NB[i];
+        }
+    }
+    else {
+        nbytes = ne00*nb00/blck_size;
+        for (int i = 1; i < GGML_MAX_DIMS; ++i) {
+            nbytes += (SRC0NE[i] - 1)*SRC0NB[i];
+        }
+    }
+
+    return nbytes;
+}
+
 // TODO
 void* kernel_pool_1d(struct imax_kernel_args* args) {
     GGML_IMAX_KERNEL_LOG_DEBUG("name: %s, lane: %d", __func__, args->lane);
@@ -1064,7 +1090,7 @@ void* kernel_pool_1d(struct imax_kernel_args* args) {
     
     // ggml_compute_forward_pool_1d_sk_p0(params, op, k0, dst);
     const char * cdata = (const char *) src0_p;
-    const char * data_end = cdata + ne00*nb00;
+    const char * data_end = cdata + cal_nbytes(args);
     float * drow = (float *) dst_p;
     int64_t total_elements = (data_end - cdata) / nb01;
 
@@ -1110,6 +1136,69 @@ void* kernel_pool_1d(struct imax_kernel_args* args) {
 // TODO
 void* kernel_pool_2d(struct imax_kernel_args* args) {
     GGML_IMAX_KERNEL_LOG_DEBUG("name: %s, lane: %d", __func__, args->lane);
+    load_src01_dst(args);
+
+    enum ggml_op_pool op = dst_op_params[0];
+    const int k0 = dst_op_params[1];
+    const int k1 = dst_op_params[2];
+    const int s0 = dst_op_params[3];
+    const int s1 = dst_op_params[4];
+    const int p0 = dst_op_params[5];
+    const int p1 = dst_op_params[6];
+
+    const char * cdata = (const char *) src0_p;
+    const char * const data_end = cdata + cal_nbytes(args);
+
+    const int64_t px = ne0;
+    const int64_t py = ne1;
+    const int64_t pa = px * py;
+
+    float * dplane = dst_p;
+
+    const int ka = k0 * k1;
+    const int offset0 = -p0;
+    const int offset1 = -p1;
+
+    while (cdata < data_end) {
+        for (int oy = 0; oy < py; ++oy) {
+            float * const drow = dplane + oy * px;
+            for (int ox = 0; ox < px; ++ox) {
+                float * const out =  drow + ox;
+                switch (op) {
+                    case GGML_OP_POOL_AVG:     *out = 0;        break;
+                    case GGML_OP_POOL_MAX:     *out = -3e33; break;
+                    case GGML_OP_POOL_COUNT: GGML_ASSERT(false); break;
+                }
+
+                const int ix = offset0 + ox * s0;
+                const int iy = offset1 + oy * s1;
+
+                for (int ky = 0; ky < k1; ++ky) {
+                    if (iy + ky < 0 || iy + ky >= ne01) continue;
+                    const float * const srow = (const float *)(cdata + nb01 * (iy + ky));
+                    for (int kx = 0; kx < k0; ++kx) {
+                        int j = ix + kx;
+                        if (j < 0 || j >= ne00) continue;
+                        switch (op) {
+                            case GGML_OP_POOL_AVG:                     *out += srow[j]; break;
+                            case GGML_OP_POOL_MAX: if (srow[j] > *out) *out  = srow[j]; break;
+                            case GGML_OP_POOL_COUNT:                GGML_ASSERT(false); break;
+                        }
+                    }
+                }
+                switch (op) {
+                    case GGML_OP_POOL_AVG:           *out /= ka; break;
+                    case GGML_OP_POOL_MAX:                       break;
+                    case GGML_OP_POOL_COUNT: GGML_ASSERT(false); break;
+                }
+            }
+        }
+
+        cdata  += nb02;
+        dplane += pa;
+    }
+
+
     return NULL;
 }
 
