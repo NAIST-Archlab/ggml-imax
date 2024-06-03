@@ -1058,6 +1058,7 @@ void* kernel_im2col(struct imax_kernel_args* args) {
     return NULL;
 }
 
+// TODO
 size_t cal_nbytes(struct imax_kernel_args* args) {
     load_src01_dst(args);
     size_t nbytes;
@@ -1205,6 +1206,20 @@ void* kernel_pool_2d(struct imax_kernel_args* args) {
 // TODO
 void* kernel_leaky_relu(struct imax_kernel_args* args) {
     GGML_IMAX_KERNEL_LOG_DEBUG("name: %s, lane: %d", __func__, args->lane);
+    load_src01_dst(args);
+
+    const int n = ne01*ne02*ne03; //ggml_nrows
+    const int nc = ne00; // ncols
+
+    float negative_slope;
+    memcpy(&negative_slope, dst_op_params, sizeof(float));
+
+    for (int i = 0; i < n; i++) {
+        ggml_vec_leaky_relu_f32(nc,
+                (float *) ((char *) dst_p  + i*(nb1)),
+                (float *) ((char *) src0_p + i*(nb01)), negative_slope);
+    }
+
     return NULL;
 }
 
@@ -1419,7 +1434,7 @@ void* kernel_contiguous(struct imax_kernel_args* args) {
     return NULL;
 }
 
-// TODO
+// TODO TRANSPOSE_2D
 void* kernel_transpose(struct imax_kernel_args* args) {
     GGML_IMAX_KERNEL_LOG_DEBUG("name: %s, lane: %d", __func__, args->lane);
     return NULL;
