@@ -1434,9 +1434,26 @@ void* kernel_contiguous(struct imax_kernel_args* args) {
     return NULL;
 }
 
-// TODO TRANSPOSE_2D
+// TODO
 void* kernel_transpose(struct imax_kernel_args* args) {
     GGML_IMAX_KERNEL_LOG_DEBUG("name: %s, lane: %d", __func__, args->lane);
+    // src0_p shape: ne00, ne01, ne02, ne03
+    // transpose the shape of ne00 and ne01
+    load_src01_dst(args);
+    int w = ne00; int h = ne01; int c = ne02; int n = ne03;
+
+    for (int ni=0; ni<n; ni++) {
+        for (int ci=0; ci<c; ci++) {
+            for (int hi=0; hi<h; hi++) {
+                for (int wi=0; wi<w; wi++) {
+                    float* src0 = (float*)&src0_p[ni*(c*h*w) + ci*(h*w) + hi*w + wi];
+                    float* dst  = (float*)&dst_p [ni *(c*w*h) + ci * (w*h) + wi*h + hi];
+                    *dst = *src0;
+                }
+            }
+        }
+    }
+
     return NULL;
 }
 
