@@ -1460,6 +1460,26 @@ void* kernel_transpose(struct imax_kernel_args* args) {
 // TODO
 void* kernel_diag_mask_inf(struct imax_kernel_args* args) {
     GGML_IMAX_KERNEL_LOG_DEBUG("name: %s, lane: %d", __func__, args->lane);
+    load_src01_dst(args);
+
+    const int  n_past  = dst_op_params[0];
+    // const int n  = ggml_nrows(src0);
+    // nrows = ne1*ne2*ne3
+    const int n = ne01*ne02*ne03;
+    const int nc = ne00;
+    const int nr = ne01;
+    const int nz = n/nr;
+
+    for (int k = 0; k < nz; k++) {
+        for (int j = lane; j < nr; j += nlane) {
+            for (int i = n_past; i < nc; i++) {
+                if (i > n_past + j) {
+                    *(float *)((char *) dst_p + k*nb2 + j*nb1 + i*nb0) = -INFINITY;
+                }
+            }
+        }
+    }
+
     return NULL;
 }
 
